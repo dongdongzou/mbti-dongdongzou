@@ -6,12 +6,15 @@
     "node": ">=22.13.0"
   },
   "scripts": {
-    "dev": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext dev",
-    "build": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext build",
+    "dev": "vinext dev",
+    "build": "vinext build",
     "build:pages": "vite build --config vite.pages.config.ts",
-    "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
-    "test": "npm run build && node --test tests/rendered-html.test.mjs",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
+    "start": "vinext start",
+    "test": "node --test tests/question-bank.test.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.app.json",
+    "validate:question-bank": "node scripts/validate-question-bank.mjs",
+    "build:question-bank": "node scripts/build-question-bank.mjs",
+    "lint": "eslint app lib pages scripts tests vite.pages.config.ts",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {

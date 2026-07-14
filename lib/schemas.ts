@@ -1,37 +1,40 @@
 export type Axis = "EI" | "SN" | "TF" | "JP";
 export type Domain = "life" | "relationship";
 export type Pole = "E" | "I" | "S" | "N" | "T" | "F" | "J" | "P";
+export type ResponseType = "selfMatch" | "frequency" | "directional";
 
 export interface QuestionOption {
-  id: "A" | "B" | "C";
-  text: string;
-  score: -1 | 0 | 1;
-  pole: Pole | null;
+  id: string;
+  label: string;
+  score: -2 | 0 | 2;
+  pole?: Pole;
 }
 
 export interface Question {
   id: string;
+  version: string;
   axis: Axis;
-  axisLabel: string;
-  leftPole: Pole;
-  rightPole: Pole;
   domain: Domain;
-  facet: string;
-  facetLabel: string;
-  scenarioKey: string;
+  facetId: string;
+  facetName: string;
+  responseType: ResponseType;
   scenarioTag: string;
-  variant: 1 | 2;
   mirrorGroup: string;
   prompt: string;
   options: QuestionOption[];
-  timeoutMs: number;
-  isOriginalItem: boolean;
+  reverseScored: boolean;
+  readingLength: number;
+  estimatedReadingMs: number;
+  weight: number;
+  isOriginal: true;
+  isActive: boolean;
+  sourceQuestionId?: string;
 }
 
 export interface ResponseRecord {
   questionId: string;
-  selectedOptionId: "A" | "B" | "C" | null;
-  score: -1 | 0 | 1 | null;
+  selectedOptionId: string | null;
+  score: -2 | -1 | 0 | 1 | 2 | null;
   elapsedMs: number;
   timedOut: boolean;
   answeredAt: string;
@@ -46,7 +49,7 @@ export interface AxisScore {
   answered: number;
   timedOut: number;
   margin: number;
-  boundaryLabel: "near-boundary" | "mild" | "clear" | "strong";
+  boundaryLabel: "near-boundary" | "mild" | "clear" | "strong" | "extreme";
 }
 
 export interface SessionResult {
@@ -58,6 +61,10 @@ export interface SessionResult {
   medianResponseMs: number;
   tooFastRate: number;
   qualityWeight: number;
+  bankVersion: string;
+  responseTypeCounts: Record<ResponseType, number>;
+  optionSelectionCounts: Record<string, number>;
+  dominantOptionRate: number;
   axes: Record<Axis, AxisScore>;
   domainAxes: Record<Domain, Record<Axis, AxisScore>>;
   facetScores: Record<string, number>;

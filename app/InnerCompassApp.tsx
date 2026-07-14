@@ -1,20 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import questionBankJson from "@/lib/data/question_bank_320.json";
+import questionBankJson from "@/lib/data/question_bank_640.json";
+import questionIdMapJson from "@/lib/data/question_id_map_v2_to_v3.json";
 import profilesJson from "@/lib/data/type_profiles_16.json";
 import config from "@/lib/data/test_config.json";
-import reportSchema from "@/lib/data/report_schema.json";
-import { buildBehaviorQuestionBank } from "@/lib/questionBank";
-import { aggregateRuns, computeSessionResult, selectQuestions } from "@/lib/scoring";
-import type { AggregateResult, Axis, Question, ResponseRecord, SessionResult } from "@/lib/schemas";
+import { composeReport, REQUIRED_DISCLAIMER } from "@/lib/reportComposer";
+import { computeSessionResult, selectQuestions } from "@/lib/scoring";
+import type { Axis, Question, ResponseRecord, SessionResult } from "@/lib/schemas";
 
 const STORE_KEY = "innercompass16:v2";
 const AXES: Axis[] = ["EI", "SN", "TF", "JP"];
-const bank = buildBehaviorQuestionBank(
-  questionBankJson.questions as unknown as Question[],
-  config.session.questionTimeoutMs,
-);
+const bank = questionBankJson.questions as unknown as Question[];
+const questionIdMap = questionIdMapJson.mappings as Record<string, string>;
+const BANK_VERSION = questionBankJson.meta.version;
 
 type TypeProfile = {
   title: string;
@@ -39,7 +38,8 @@ type StoredSession = {
   createdAt: string;
   completedAt?: string;
   result?: SessionResult;
-  dataVersion: 2;
+  bankVersion?: string;
+  dataVersion: 2 | 3;
 };
 
 type Store = { version: 2; sessions: StoredSession[] };
@@ -51,7 +51,17 @@ function loadStore(): Store {
   try {
     const parsed = JSON.parse(localStorage.getItem(STORE_KEY) || "null");
     if (!parsed || !Array.isArray(parsed.sessions)) return emptyStore();
-    return { version: 2, sessions: parsed.sessions };
+    const sessions = parsed.sessions.map((session: StoredSession) => {
+      if (session.status !== "active" || session.bankVersion === BANK_VERSION) return session;
+      return {
+        ...session,
+        questionIds: session.questionIds.map((id) => questionIdMap[id] ?? id),
+        responses: session.responses.map((response) => ({ ...response, questionId: questionIdMap[response.questionId] ?? response.questionId })),
+        bankVersion: BANK_VERSION,
+        dataVersion: 3 as const,
+      };
+    });
+    return { version: 2, sessions };
   } catch {
     return emptyStore();
   }
@@ -71,17 +81,11 @@ function upsertSession(session: StoredSession) {
 
 function sessionQuestions(session: StoredSession): Question[] {
   const byId = new Map(bank.map((question) => [question.id, question]));
-  return session.questionIds.map((id) => byId.get(id)).filter(Boolean) as Question[];
+  return session.questionIds.map((id) => byId.get(id) ?? byId.get(questionIdMap[id])).filter(Boolean) as Question[];
 }
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(value));
-}
-
-function confidenceLabel(value: number) {
-  if (value >= 78) return "较高";
-  if (value >= 58) return "中等";
-  return "待验证";
 }
 
 function Logo() {
@@ -107,9 +111,8 @@ function TopBar({ onHome, action }: { onHome: () => void; action?: React.ReactNo
   );
 }
 
-function AxisBars({ result, aggregate }: { result?: SessionResult; aggregate?: AggregateResult }) {
-  const axes = aggregate?.axes || result?.axes;
-  if (!axes) return null;
+function AxisBars({ result }: { result: SessionResult }) {
+  const axes = result.axes;
   return (
     <div className="axis-list">
       {AXES.map((axis) => {
@@ -117,7 +120,7 @@ function AxisBars({ result, aggregate }: { result?: SessionResult; aggregate?: A
         const near = score.boundaryLabel === "near-boundary";
         return (
           <div className="axis-row" key={axis}>
-            <div className="axis-labels"><b>{score.leftPole} {Math.round(score.leftPercent)}%</b><span>{near ? "情境型" : aggregate ? "综合" : "本次"}</span><b>{Math.round(score.rightPercent)}% {score.rightPole}</b></div>
+            <div className="axis-labels"><b>{score.leftPole} {Math.round(score.leftPercent)}%</b><span>{near ? "情境型" : "本次"}</span><b>{Math.round(score.rightPercent)}% {score.rightPole}</b></div>
             <div className="axis-track" aria-label={`${score.leftPole} ${score.leftPercent}%，${score.rightPole} ${score.rightPercent}%`}>
               <span style={{ width: `${score.leftPercent}%` }} />
               <i />
@@ -154,7 +157,7 @@ function HomeView({ navigate, revision }: { navigate: (path: string) => void; re
         <article><span className="feature-icon">⌁</span><h3>一次完整画像</h3><p>题量覆盖四个偏好维度与生活、关系场景，一次完成即可查看完整结果。</p></article>
         <article><span className="feature-icon">⌂</span><h3>答案只在本机</h3><p>无需注册，数据默认保存在当前设备的浏览器中，也可以随时导出或删除。</p></article>
       </section>
-      <footer className="disclaimer">基于 MBTI 四偏好框架的原创非官方工具，不是官方认证评估，也不构成医学或心理诊断。</footer>
+      <footer className="disclaimer">{REQUIRED_DISCLAIMER}</footer>
     </Shell>
   );
 }
@@ -163,13 +166,13 @@ function SetupView({ navigate }: { navigate: (path: string) => void }) {
   const [count, setCount] = useState(config.session.defaultQuestionCount);
   const start = () => {
     const store = loadStore();
-    const recent = store.sessions.slice(0, 3).flatMap((session) => session.questionIds);
+    const recent = store.sessions.slice(0, 3).flatMap((session) => session.questionIds.map((id) => questionIdMap[id] ?? id));
     const seed = Date.now();
     const selected = selectQuestions(bank, count, recent, seed);
     const session: StoredSession = {
       id: `ic-${seed.toString(36)}`, seed, questionIds: selected.map((question) => question.id),
       currentIndex: 0, currentQuestionStartedAt: Date.now(), responses: [], status: "active",
-      createdAt: new Date().toISOString(), dataVersion: 2,
+      createdAt: new Date().toISOString(), bankVersion: BANK_VERSION, dataVersion: 3,
     };
     upsertSession(session);
     navigate(`/test/${session.id}`);
@@ -207,7 +210,7 @@ function TestView({ sessionId, navigate }: { sessionId: string; navigate: (path:
   const questions = useMemo(() => session ? sessionQuestions(session) : [], [session]);
   const question = session ? questions[session.currentIndex] : undefined;
 
-  const submit = useCallback((optionId: "A" | "B" | "C" | null) => {
+  const submit = useCallback((optionId: string | null) => {
     const current = sessionRef.current;
     if (!current || current.status !== "active" || lockedRef.current) return;
     const allQuestions = sessionQuestions(current);
@@ -219,7 +222,7 @@ function TestView({ sessionId, navigate }: { sessionId: string; navigate: (path:
     const option = optionId ? currentQuestion.options.find((item) => item.id === optionId) : undefined;
     const response: ResponseRecord = {
       questionId: currentQuestion.id, selectedOptionId: optionId, score: option?.score ?? null,
-      elapsedMs: Math.min(Date.now() - current.currentQuestionStartedAt, currentQuestion.timeoutMs),
+      elapsedMs: Math.min(Date.now() - current.currentQuestionStartedAt, config.session.questionTimeoutMs),
       timedOut: optionId === null, answeredAt: new Date().toISOString(),
     };
     const responses = [...current.responses.filter((item) => item.questionId !== response.questionId), response];
@@ -245,7 +248,7 @@ function TestView({ sessionId, navigate }: { sessionId: string; navigate: (path:
       const current = sessionRef.current;
       if (document.visibilityState === "visible" && current) {
         const currentQuestion = sessionQuestions(current)[current.currentIndex];
-        if (currentQuestion && Date.now() - current.currentQuestionStartedAt >= currentQuestion.timeoutMs) submit(null);
+        if (currentQuestion && Date.now() - current.currentQuestionStartedAt >= config.session.questionTimeoutMs) submit(null);
       }
     };
     document.addEventListener("visibilitychange", onVisibility);
@@ -254,7 +257,7 @@ function TestView({ sessionId, navigate }: { sessionId: string; navigate: (path:
 
   useEffect(() => {
     if (!question || !session || lockedRef.current) return;
-    const remaining = question.timeoutMs - (Date.now() - session.currentQuestionStartedAt);
+    const remaining = config.session.questionTimeoutMs - (Date.now() - session.currentQuestionStartedAt);
     if (remaining <= 0) { submit(null); return; }
     const timeout = window.setTimeout(() => submit(null), remaining);
     return () => window.clearTimeout(timeout);
@@ -263,53 +266,87 @@ function TestView({ sessionId, navigate }: { sessionId: string; navigate: (path:
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const key = event.key.toUpperCase();
-      const map: Record<string, "A" | "B" | "C"> = { A: "A", "1": "A", B: "B", "2": "B", C: "C", "3": "C" };
-      if (map[key]) submit(map[key]);
+      const map: Record<string, number> = { A: 0, "1": 0, B: 1, "2": 1, C: 2, "3": 2 };
+      const option = question?.options[map[key]];
+      if (option) submit(option.id);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [submit]);
+  }, [question, submit]);
 
   if (!session || !question) return <MissingView navigate={navigate} />;
-  const remaining = Math.max(0, question.timeoutMs - (now - session.currentQuestionStartedAt));
+  const remaining = Math.max(0, config.session.questionTimeoutMs - (now - session.currentQuestionStartedAt));
   const seconds = Math.max(1, Math.ceil(remaining / 1000));
   const progress = (session.currentIndex / questions.length) * 100;
   return (
     <Shell compact>
       <header className="test-header">
         <div className="test-brand"><Logo /><span>{session.currentIndex + 1} <i>/</i> {questions.length}</span></div>
-        <div className={seconds === 1 ? "timer urgent" : "timer"}><span style={{ "--timer": `${remaining / question.timeoutMs * 360}deg` } as React.CSSProperties}>{seconds}</span></div>
+        <div className={seconds === 1 ? "timer urgent" : "timer"}><span style={{ "--timer": `${remaining / config.session.questionTimeoutMs * 360}deg` } as React.CSSProperties}>{seconds}</span></div>
       </header>
       <div className="top-progress"><span style={{ width: `${progress}%` }} /></div>
       <section className="question-stage" key={question.id}>
         <div className="question-number">第 {session.currentIndex + 1} 题</div>
         <h1>{question.prompt}</h1>
-        <div className="option-list agreement-scale" aria-label="符合程度">
+        <p className="question-guide">{question.responseType === "frequency" ? "这种情况通常会发生吗？" : question.responseType === "directional" ? "你更接近哪一种真实反应？" : "这有多像你平时真实的状态？"}</p>
+        <div className={question.responseType === "directional" ? "option-list directional-scale" : "option-list agreement-scale"} aria-label="符合程度">
           {question.options.map((option, index) => (
             <button disabled={locked} className={chosen === option.id ? "chosen" : ""} key={option.id} onClick={() => submit(option.id)}>
-              <span>{String.fromCharCode(65 + index)}</span><b>{option.text}</b>
+              <span>{String.fromCharCode(65 + index)}</span><b>{option.label}</b>
             </button>
           ))}
         </div>
-        <p className="test-hint">请选择这个行为描述与你的符合程度</p>
+        <p className="test-hint">没有正确答案，请选择更接近平时状态的一项</p>
       </section>
     </Shell>
   );
+}
+
+function downloadResultPng(report: ReturnType<typeof composeReport>, title: string) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1200; canvas.height = 1500;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  ctx.fillStyle = "#f6f8fb"; ctx.fillRect(0, 0, 1200, 1500);
+  ctx.fillStyle = "#ffffff"; ctx.roundRect(60, 60, 1080, 1380, 42); ctx.fill();
+  ctx.fillStyle = "#1677ff"; ctx.font = "700 28px system-ui"; ctx.fillText("INNERCOMPASS 16 · 非官方", 120, 145);
+  ctx.fillStyle = "#111318"; ctx.font = "800 142px system-ui"; ctx.fillText(report.typeCode, 120, 340);
+  ctx.font = "700 38px system-ui"; ctx.fillText(title, 120, 402);
+  ctx.fillStyle = "#5f6875"; ctx.font = "25px system-ui";
+  (report.flowTitle.match(/.{1,30}/g) || []).slice(0, 2).forEach((line, index) => ctx.fillText(line, 120, 480 + index * 38));
+  report.axes.forEach((axis, index) => {
+    const y = 610 + index * 122;
+    ctx.fillStyle = "#111318"; ctx.font = "700 25px system-ui"; ctx.fillText(`${axis.dominantPole} ${axis.dominantPercent}%`, 120, y);
+    ctx.fillStyle = "#e6ebf2"; ctx.roundRect(120, y + 22, 960, 14, 7); ctx.fill();
+    ctx.fillStyle = "#1677ff"; ctx.roundRect(120, y + 22, 960 * axis.dominantPercent / 100, 14, 7); ctx.fill();
+    ctx.fillStyle = "#7a828e"; ctx.font = "20px system-ui"; ctx.fillText(`${axis.title} · ${axis.strengthLabel}`, 120, y + 70);
+  });
+  ctx.fillStyle = "#111318"; ctx.font = "700 27px system-ui"; ctx.fillText("最高 3 项行为特质", 120, 1130);
+  report.topTraits.slice(0, 3).forEach((trait, index) => {
+    ctx.fillStyle = index === 0 ? "#1677ff" : "#4e5865"; ctx.font = "650 25px system-ui";
+    ctx.fillText(`${String(index + 1).padStart(2, "0")}  ${trait.name}  ${trait.score}`, 120, 1185 + index * 48);
+  });
+  ctx.fillStyle = "#9097a1"; ctx.font = "19px system-ui";
+  ctx.fillText("dongdongzou.github.io/mbti-dongdongzou", 120, 1370);
+  ctx.fillText("原创非官方自我探索工具 · 不构成医学或心理诊断", 120, 1408);
+  const link = document.createElement("a"); link.download = `InnerCompass-${report.typeCode}.png`; link.href = canvas.toDataURL("image/png"); link.click();
 }
 
 function RunResultView({ sessionId, navigate }: { sessionId: string; navigate: (path: string) => void }) {
   const session = loadStore().sessions.find((item) => item.id === sessionId);
   if (!session?.result) return <MissingView navigate={navigate} />;
   const result = session.result;
-  const typeCode = AXES.map((axis) => result.axes[axis].rightPercent > 50 ? result.axes[axis].rightPole : result.axes[axis].leftPole).join("");
+  const completedRuns = loadStore().sessions.filter((item) => item.result).map((item) => item.result as SessionResult).reverse();
+  const report = composeReport(result, completedRuns);
+  const typeCode = report.typeCode;
   const profile = profiles[typeCode];
   return (
     <Shell>
-      <TopBar onHome={() => navigate("/")} action={<button className="text-button" onClick={() => navigate("/history")}>历史记录</button>} />
+      <TopBar onHome={() => navigate("/")} action={<div className="top-actions"><button className="text-button" onClick={() => downloadResultPng(report, profile?.title || typeCode)}>导出 PNG</button><button className="text-button" onClick={() => window.print()}>打印 / PDF</button><button className="text-button" onClick={() => navigate("/history")}>历史记录</button></div>} />
       <section className="result-hero">
-        <div className="result-badge">完整画像 · {result.plannedCount} 题</div>
+        <div className="result-badge">{report.runValidation.label} · {result.plannedCount} 题</div>
         <p>你的行为偏好更接近</p><h1>{typeCode}</h1><h2>{profile?.title}</h2>
-        <p className="result-overview">{profile?.overview}</p>
+        <p className="result-overview">{report.overview}</p>
       </section>
       <section className="report-card"><div className="section-heading"><div><span>偏好分布</span><h2>四个维度的本次位置</h2></div><em>结果不是能力高低</em></div><AxisBars result={result} /></section>
       <section className="metrics-grid">
@@ -317,11 +354,16 @@ function RunResultView({ sessionId, navigate }: { sessionId: string; navigate: (
         <article><span>中位反应</span><b>{(result.medianResponseMs / 1000).toFixed(1)}s</b><small>反映本次作答节奏</small></article>
         <article><span>临界维度</span><b>{AXES.filter((axis) => result.axes[axis].boundaryLabel === "near-boundary").length}</b><small>接近中线时更受情境影响</small></article>
       </section>
-      {profile && <>
-        <section className="report-card intro-card"><div className="section-heading"><div><span>行为解读</span><h2>你更常使用的行为路径</h2></div></div><div className="insight-grid"><div><span>行为逻辑</span><p>{profile.behaviorLogic}</p></div><div><span>压力下的倾向</span><p>{profile.stressPattern}</p></div></div></section>
-        <section className="report-card split-report"><div><div className="section-heading"><div><span>亲密关系</span><h2>关系中的你</h2></div></div><p>{profile.relationship}</p></div><div><div className="section-heading"><div><span>优势证据</span><h2>你可以信任的部分</h2></div></div><ul className="bullet-list">{profile.strengths.map((item) => <li key={item}>{item}</li>)}</ul></div></section>
-        <section className="report-card"><div className="section-heading"><div><span>成长建议</span><h2>可以开始的小动作</h2></div></div><ol className="number-list">{profile.growth.map((item) => <li key={item}>{item}</li>)}</ol></section>
-      </>}
+      <section className="report-card intro-card"><div className="section-heading"><div><span>行为逻辑</span><h2>{report.flowTitle}</h2></div></div><p className="lead-copy">{report.behaviorLogic}</p></section>
+      <section className="report-card"><div className="section-heading"><div><span>四维详细解释</span><h2>百分比描述偏好方向，不是人格成分</h2></div></div><div className="axis-detail-grid">{report.axes.map((axis) => <article key={axis.axis}><div className="axis-detail-title"><b>{axis.axis}</b><div><span>{axis.title}</span><h3>{axis.dominantPole} {axis.dominantPercent}% · {axis.strengthLabel}</h3></div></div><p>{axis.definition}</p><p className="axis-summary">{axis.summary}</p><dl><div><dt>生活表现</dt><dd>{axis.life}</dd></div><div><dt>学习 / 工作</dt><dd>{axis.work}</dd></div><div><dt>感情表现</dt><dd>{axis.relationship}</dd></div><div><dt>容易被误解</dt><dd>{axis.misunderstood}</dd></div><div><dt>另一侧能力</dt><dd>{axis.otherSide}</dd></div>{axis.sceneSwitch && <div><dt>场景切换</dt><dd>{axis.sceneSwitch}</dd></div>}</dl></article>)}</div></section>
+      <section className="report-card"><div className="section-heading"><div><span>你的 32 项行为特质</span><h2>高分代表更常依赖，不代表更好</h2></div><em>0–100</em></div><div className="trait-ranking"><div className="trait-band top"><h3>最高 6 项</h3>{report.topTraits.map((trait) => <article key={trait.id}><div><b>{trait.name}</b><span>{trait.domain === "life" ? "生活" : "感情"}</span></div><strong>{trait.score}</strong><i><em style={{ width: `${trait.score}%` }} /></i><p>{trait.interpretation}</p></article>)}</div><details><summary>查看中间 20 项</summary><div className="trait-compact-grid">{report.middleTraits.map((trait) => <div key={trait.id}><span>{trait.name}</span><b>{trait.score}</b><i><em style={{ width: `${trait.score}%` }} /></i></div>)}</div></details><div className="trait-band bottom"><h3>较少依赖的 6 项</h3>{report.bottomTraits.map((trait) => <article key={trait.id}><div><b>{trait.name}</b><span>{trait.domain === "life" ? "生活" : "感情"}</span></div><strong>{trait.score}</strong><i><em style={{ width: `${trait.score}%` }} /></i><p>{trait.interpretation}</p></article>)}</div></div></section>
+      <section className="report-card split-report"><div><div className="section-heading"><div><span>生活画像</span><h2>日常、学习与工作中的你</h2></div></div><p>{report.lifeSummary}</p><ul className="quality-list">{report.lifeTraits.slice(0, 5).map((trait) => <li key={trait.id}><span>{trait.name}</span><b>{trait.score}</b></li>)}</ul></div><div><div className="section-heading"><div><span>感情画像</span><h2>亲密关系中的你</h2></div></div><p>{report.relationshipSummary}</p><ul className="quality-list">{report.relationshipTraits.slice(0, 5).map((trait) => <li key={trait.id}><span>{trait.name}</span><b>{trait.score}</b></li>)}</ul></div></section>
+      <section className="report-card"><div className="section-heading"><div><span>生活画像</span><h2>十个真实生活侧面</h2></div></div><div className="topic-grid">{report.lifeTopics.map((topic) => <article key={topic.title}><h3>{topic.title}</h3><p>{topic.text}</p></article>)}</div></section>
+      <section className="report-card"><div className="section-heading"><div><span>感情与亲密关系</span><h2>八个关系中的反应侧面</h2></div></div><div className="topic-grid relationship">{report.relationshipTopics.map((topic) => <article key={topic.title}><h3>{topic.title}</h3><p>{topic.text}</p></article>)}</div></section>
+      {report.gaps.length > 0 && <section className="switch-card"><span>生活与感情场景差异</span><h2>你会根据关系距离调整行为权重。</h2>{report.gaps.map((gap) => <p key={gap.axis}><b>{gap.axis}</b> · {gap.text}</p>)}</section>}
+      <section className="report-card split-report"><div><div className="section-heading"><div><span>优势特点</span><h2>来自真实高分特质</h2></div></div><ul className="narrative-list">{report.strengths.map((item) => <li key={item.title}><b>{item.title}</b><p>{item.text}</p></li>)}</ul></div><div><div className="section-heading"><div><span>需要留意</span><h2>较少依赖的路径</h2></div></div><ul className="narrative-list attention">{report.watchouts.map((item) => <li key={item.title}><b>{item.title}</b><p>{item.text}</p></li>)}</ul></div></section>
+      <section className="report-card"><div className="section-heading"><div><span>成长建议</span><h2>可以直接使用的小动作</h2></div></div><ol className="number-list growth-list">{report.growth.map((item) => <li key={item.title}><b>{item.title}</b><p>{item.text}</p></li>)}</ol></section>
+      <section className="report-card split-report"><div><div className="section-heading"><div><span>多次验证（可选）</span><h2>{report.runValidation.label} · {report.runValidation.count} 次</h2></div></div><p>一次完整问卷即可获得报告；重复填写只用于观察不同状态下的波动。</p><ul className="quality-list">{report.runValidation.axes.map((axis) => <li key={axis.axis}><span>{axis.axis} 波动</span><b>{axis.change} 分 · σ {axis.sd}</b></li>)}</ul></div><div><div className="section-heading"><div><span>数据质量</span><h2>这份结果如何理解</h2></div></div><ul className="quality-list"><li><span>总体可信度</span><b>{report.quality.confidence}%</b></li><li><span>有效回答</span><b>{report.quality.answered} / {report.quality.planned}</b></li><li><span>漏答率</span><b>{report.quality.missedRate}%</b></li><li><span>中位回答</span><b>{report.quality.medianSeconds}s</b></li><li><span>过快比例</span><b>{report.quality.tooFastPercent}%</b></li><li><span>接近中线</span><b>{report.quality.boundaryCount} 个维度</b></li><li><span>单一选项占比</span><b>{report.quality.dominantOptionPercent}%</b></li><li><span>题库版本</span><b>{report.quality.bankVersion}</b></li></ul></div></section>
       <div className="result-actions">
         <button className="primary-button" onClick={() => navigate("/")}>完成并返回首页 <span>→</span></button>
         <button className="secondary-button" onClick={async () => {
@@ -331,62 +373,7 @@ function RunResultView({ sessionId, navigate }: { sessionId: string; navigate: (
           else await navigator.clipboard.writeText(`${text} ${shareUrl}`);
         }}>分享结果</button>
       </div>
-      <p className="disclaimer centered">一次完成即可形成完整画像；结果反映当前的行为偏好，不构成医学或心理诊断。</p>
-    </Shell>
-  );
-}
-
-function downloadReportPng(aggregate: AggregateResult, profile: TypeProfile) {
-  const canvas = document.createElement("canvas");
-  canvas.width = 1200; canvas.height = 1500;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-  ctx.fillStyle = "#f7f8fb"; ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = "#ffffff"; ctx.roundRect(70, 70, 1060, 1360, 40); ctx.fill();
-  ctx.fillStyle = "#111318"; ctx.font = "700 38px system-ui"; ctx.fillText("InnerCompass 16", 130, 155);
-  ctx.fillStyle = "#6b7280"; ctx.font = "26px system-ui"; ctx.fillText("我的行为偏好画像", 130, 220);
-  ctx.fillStyle = "#111318"; ctx.font = "800 150px system-ui"; ctx.fillText(aggregate.typeCode, 130, 420);
-  ctx.font = "700 42px system-ui"; ctx.fillText(profile.title, 130, 490);
-  ctx.fillStyle = "#6b7280"; ctx.font = "26px system-ui";
-  const lines = profile.overview.match(/.{1,28}/g) || [];
-  lines.slice(0, 3).forEach((line, index) => ctx.fillText(line, 130, 565 + index * 42));
-  AXES.forEach((axis, index) => {
-    const score = aggregate.axes[axis]; const y = 760 + index * 130;
-    ctx.fillStyle = "#111318"; ctx.font = "700 28px system-ui"; ctx.fillText(`${score.leftPole}  ${Math.round(score.leftPercent)}%`, 130, y);
-    ctx.textAlign = "right"; ctx.fillText(`${Math.round(score.rightPercent)}%  ${score.rightPole}`, 1070, y); ctx.textAlign = "left";
-    ctx.fillStyle = "#e8ebf1"; ctx.roundRect(130, y + 28, 940, 20, 10); ctx.fill();
-    ctx.fillStyle = "#1677ff"; ctx.roundRect(130, y + 28, 940 * score.leftPercent / 100, 20, 10); ctx.fill();
-  });
-  ctx.fillStyle = "#9ca3af"; ctx.font = "22px system-ui"; ctx.fillText("原创非官方自我探索工具 · 不构成医学或心理诊断", 130, 1365);
-  const link = document.createElement("a"); link.download = `InnerCompass-${aggregate.typeCode}.png`; link.href = canvas.toDataURL("image/png"); link.click();
-}
-
-function ReportView({ navigate }: { navigate: (path: string) => void }) {
-  const sessions = loadStore().sessions.filter((item) => item.result);
-  const runs = sessions.map((item) => item.result as SessionResult).reverse();
-  if (!runs.length) return <MissingView navigate={navigate} empty />;
-  const aggregate = aggregateRuns(runs);
-  const profile = profiles[aggregate.typeCode];
-  const gaps = AXES.map((axis) => {
-    const life = runs.reduce((sum, run) => sum + run.domainAxes.life[axis].rightPercent, 0) / runs.length;
-    const relationship = runs.reduce((sum, run) => sum + run.domainAxes.relationship[axis].rightPercent, 0) / runs.length;
-    return { axis, life, relationship, gap: Math.abs(life - relationship) };
-  }).filter((item) => item.gap >= 12);
-  const featureEntries = Object.entries(aggregate.lifeFeatureScores);
-  return (
-    <Shell>
-      <TopBar onHome={() => navigate("/")} action={<div className="top-actions"><button className="text-button" onClick={() => downloadReportPng(aggregate, profile)}>导出 PNG</button><button className="text-button" onClick={() => window.print()}>打印 / PDF</button></div>} />
-      <section className="report-header">
-        <div><span>完整画像 · {runs.length} 份本地记录</span><h1>{aggregate.typeCode}</h1><h2>{profile.title}</h2></div>
-        <div className="confidence-ring"><b>{Math.round(aggregate.overallConfidence)}</b><span>可信度 · {confidenceLabel(aggregate.overallConfidence)}</span></div>
-      </section>
-      <section className="report-card intro-card"><div className="section-heading"><div><span>心理概述</span><h2>你更常使用的行为路径</h2></div></div><p className="lead-copy">{profile.overview}</p><div className="insight-grid"><div><span>行为逻辑</span><p>{profile.behaviorLogic}</p></div><div><span>压力下的倾向</span><p>{profile.stressPattern}</p></div></div></section>
-      <section className="report-card"><div className="section-heading"><div><span>四维度占比</span><h2>偏好位置</h2></div><em>数字比标签更重要</em></div><AxisBars aggregate={aggregate} /></section>
-      {gaps.length > 0 && <section className="switch-card"><span>场景切换</span><h2>你会根据关系距离，调整行为权重。</h2>{gaps.map(({ axis, life, relationship }) => <p key={axis}>在 {axis} 维度上，你的生活场景位置为 {Math.round(life)}%，关系场景为 {Math.round(relationship)}%。这不代表前后矛盾，而是你在亲密关系中使用了不同的应对权重。</p>)}</section>}
-      <section className="report-card"><div className="section-heading"><div><span>生活特性</span><h2>八项可观察偏好</h2></div></div><div className="feature-score-grid">{featureEntries.map(([name, score]) => <div key={name}><span>{name}</span><b>{Math.round(score)}</b><i><em style={{ width: `${score}%` }} /></i></div>)}</div></section>
-      <section className="report-card split-report"><div><div className="section-heading"><div><span>亲密关系</span><h2>关系中的你</h2></div></div><p>{profile.relationship}</p></div><div><div className="section-heading"><div><span>数据质量</span><h2>这份结果如何理解</h2></div></div><ul className="quality-list"><li>加权完成率 <b>{Math.round(aggregate.dataQuality.weightedCompletionRate)}%</b></li><li>快速作答比例 <b>{Math.round(aggregate.dataQuality.meanTooFastRate)}%</b></li><li>本地问卷记录 <b>{aggregate.runCount} 份</b></li></ul></div></section>
-      <section className="report-card split-report"><div><div className="section-heading"><div><span>优势证据</span><h2>你可以信任的部分</h2></div></div><ul className="bullet-list">{profile.strengths.map((item) => <li key={item}>{item}</li>)}</ul></div><div><div className="section-heading"><div><span>成长建议</span><h2>可以开始的小动作</h2></div></div><ol className="number-list">{profile.growth.map((item) => <li key={item}>{item}</li>)}</ol></div></section>
-      <section className="report-note"><h3>{reportSchema.reportSections.at(-1)?.title}</h3><p>{reportSchema.reportSections.at(-1) && "text" in reportSchema.reportSections.at(-1)! ? reportSchema.reportSections.at(-1)!.text : "本结果用于自我观察，不构成诊断。"}</p></section>
+      <p className="disclaimer centered">{REQUIRED_DISCLAIMER}</p>
     </Shell>
   );
 }
@@ -408,7 +395,8 @@ function HistoryView({ navigate, refresh }: { navigate: (path: string) => void; 
         {!store.sessions.length && <div className="empty-card"><Logo /><h2>还没有记录</h2><p>完成一次问卷后，你会在这里看到完整结果。</p><button className="primary-button" onClick={() => navigate("/setup")}>开始测试 <span>→</span></button></div>}
         {store.sessions.map((session, index) => {
           const type = session.result ? AXES.map((axis) => session.result!.axes[axis].rightPercent > 50 ? session.result!.axes[axis].rightPole : session.result!.axes[axis].leftPole).join("") : "进行中";
-          return <article key={session.id}><div className="history-index">{String(index + 1).padStart(2, "0")}</div><div><span>{formatDate(session.createdAt)} · {session.questionIds.length} 题</span><h2>{type} {session.result && <small>{profiles[type]?.title}</small>}</h2><p>{session.status === "active" ? `已完成 ${session.currentIndex} / ${session.questionIds.length}` : `完成率 ${Math.round((session.result?.completionRate || 0) * 100)}% · 中位反应 ${((session.result?.medianResponseMs || 0) / 1000).toFixed(1)} 秒`}</p></div><div className="history-actions"><button onClick={() => navigate(session.status === "active" ? `/test/${session.id}` : `/run-result/${session.id}`)}>{session.status === "active" ? "继续" : "查看"}</button><button className="danger" onClick={() => remove(session.id)}>删除</button></div></article>;
+          const version = session.bankVersion ?? session.result?.bankVersion ?? "旧版";
+          return <article key={session.id}><div className="history-index">{String(index + 1).padStart(2, "0")}</div><div><span>{formatDate(session.createdAt)} · {session.questionIds.length} 题 · 题库 {version}</span><h2>{type} {session.result && <small>{profiles[type]?.title}</small>}</h2><p>{session.status === "active" ? `已完成 ${session.currentIndex} / ${session.questionIds.length}` : `完成率 ${Math.round((session.result?.completionRate || 0) * 100)}% · 中位反应 ${((session.result?.medianResponseMs || 0) / 1000).toFixed(1)} 秒`}</p></div><div className="history-actions"><button onClick={() => navigate(session.status === "active" ? `/test/${session.id}` : `/run-result/${session.id}`)}>{session.status === "active" ? "继续" : "查看"}</button><button className="danger" onClick={() => remove(session.id)}>删除</button></div></article>;
         })}
       </section>
     </Shell>
@@ -444,7 +432,10 @@ export function InnerCompassApp() {
   }, []);
   if (path === "/setup") return <SetupView navigate={navigate} />;
   if (path === "/history") return <HistoryView navigate={navigate} refresh={() => setRevision((value) => value + 1)} />;
-  if (path === "/report") return <ReportView navigate={navigate} />;
+  if (path === "/report") {
+    const latest = loadStore().sessions.find((session) => session.result);
+    return latest ? <RunResultView sessionId={latest.id} navigate={navigate} /> : <MissingView navigate={navigate} empty />;
+  }
   if (path.startsWith("/test/")) return <TestView sessionId={path.split("/").at(-1) || ""} navigate={navigate} />;
   if (path.startsWith("/run-result/")) return <RunResultView sessionId={path.split("/").at(-1) || ""} navigate={navigate} />;
   return <HomeView navigate={navigate} revision={revision} />;

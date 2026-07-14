@@ -4,6 +4,7 @@ import type {
   AxisScore,
   Domain,
   Question,
+  ResponseType,
   ResponseRecord,
   SessionResult,
 } from "./schemas";
@@ -23,6 +24,11 @@ function clamp(value: number, min: number, max: number): number {
 
 function round1(value: number): number {
   return Math.round(value * 10) / 10;
+}
+
+function normalizedScore(score: ResponseRecord["score"]): number {
+  if (score === null) return 0;
+  return clamp(score / (Math.abs(score) > 1 ? 2 : 1), -1, 1);
 }
 
 function mulberry32(seed: number): () => number {
@@ -68,10 +74,11 @@ function constrainedOrder(items: Question[], random: () => number): Question[] {
 }
 
 function boundaryLabel(margin: number): AxisScore["boundaryLabel"] {
-  if (margin <= 6) return "near-boundary";
-  if (margin <= 14) return "mild";
-  if (margin <= 28) return "clear";
-  return "strong";
+  if (margin <= 8) return "near-boundary";
+  if (margin <= 28) return "mild";
+  if (margin <= 48) return "clear";
+  if (margin <= 68) return "strong";
+  return "extreme";
 }
 
 function scoreAxis(
@@ -87,7 +94,7 @@ function scoreAxis(
   const mean =
     answered.length === 0
       ? 0
-      : answered.reduce((sum, r) => sum + (r.score ?? 0), 0) / answered.length;
+      : answered.reduce((sum, r) => sum + normalizedScore(r.score), 0) / answered.length;
 
   const rightPercent = round1(clamp(((mean + 1) / 2) * 100, 0, 100));
   const leftPercent = round1(100 - rightPercent);
@@ -106,14 +113,49 @@ function scoreAxis(
   };
 }
 
-/**
- * 分层抽题：
- * 1. 题数限制在 80–120；
- * 2. EI/SN/TF/JP 与 life/relationship 尽量均衡；
- * 3. 同一 mirrorGroup 在一次问卷中最多出现一次；
- * 4. 再次填写时优先避开最近出现过的题；
- * 5. 最后统一洗牌，前端不展示维度。
- */
+function allocateAcrossCells(
+  total: number,
+  cellTargets: Map<string, number>,
+  random: () => number,
+): Map<string, number> {
+  const grandTotal = [...cellTargets.values()].reduce((sum, value) => sum + value, 0);
+  const result = new Map<string, number>();
+  const fractions: Array<{ key: string; fraction: number }> = [];
+  let assigned = 0;
+  for (const [key, target] of cellTargets) {
+    const exact = total * target / grandTotal;
+    const base = Math.floor(exact);
+    result.set(key, base);
+    fractions.push({ key, fraction: exact - base + random() * 0.0001 });
+    assigned += base;
+  }
+  for (const item of fractions.sort((a, b) => b.fraction - a.fraction)) {
+    if (assigned >= total) break;
+    result.set(item.key, (result.get(item.key) ?? 0) + 1);
+    assigned += 1;
+  }
+  return result;
+}
+
+function cellTargetsFor(count: number, seed: number): Map<string, number> {
+  if (count === 80 || count === 120) {
+    const each = count / 8;
+    return new Map(AXES.flatMap((axis) => DOMAINS.map((domain) => [`${axis}-${domain}`, each] as const)));
+  }
+  if (count === 100) {
+    const lifeHigh = seed % 2 === 0 ? new Set<Axis>(["EI", "TF"]) : new Set<Axis>(["SN", "JP"]);
+    return new Map(AXES.flatMap((axis) => [
+      [`${axis}-life`, lifeHigh.has(axis) ? 13 : 12] as const,
+      [`${axis}-relationship`, lifeHigh.has(axis) ? 12 : 13] as const,
+    ]));
+  }
+
+  const cells = AXES.flatMap((axis) => DOMAINS.map((domain) => `${axis}-${domain}`));
+  const base = Math.floor(count / cells.length);
+  return new Map(cells.map((key, index) => [key, base + (index < count % cells.length ? 1 : 0)]));
+}
+
+/** 分层抽题：固定维度/场景配额，同时约束 32 特质、答案模板、正反向与镜像组。 */
 export function selectQuestions(
   bank: Question[],
   requestedCount = 100,
@@ -123,65 +165,61 @@ export function selectQuestions(
   const count = Math.round(clamp(requestedCount, 80, 120));
   const random = mulberry32(seed);
   const recent = new Set(recentQuestionIds);
-
-  const cells = AXES.flatMap((axis) =>
-    DOMAINS.map((domain) => ({ axis, domain })),
-  );
-  const base = Math.floor(count / cells.length);
-  let remainder = count % cells.length;
-
-  const targets = new Map<string, number>();
-  for (const cell of shuffle(cells, random)) {
-    const key = `${cell.axis}-${cell.domain}`;
-    targets.set(key, base + (remainder > 0 ? 1 : 0));
-    remainder -= remainder > 0 ? 1 : 0;
-  }
+  const targets = cellTargetsFor(count, seed);
+  const selfTargets = allocateAcrossCells(Math.round(count * 0.7), targets, random);
+  const frequencyTargets = allocateAcrossCells(Math.round(count * 0.2), targets, random);
+  const reverseTargets = allocateAcrossCells(Math.floor(count / 2), targets, random);
 
   const chosen: Question[] = [];
   const chosenIds = new Set<string>();
   const mirrorGroups = new Set<string>();
 
-  for (const cell of shuffle(cells, random)) {
-    const key = `${cell.axis}-${cell.domain}`;
-    const target = targets.get(key) ?? 0;
-    const pool = shuffle(
-      bank.filter((q) => q.axis === cell.axis && q.domain === cell.domain),
-      random,
-    );
-
-    const preferred = [
-      ...pool.filter((q) => !recent.has(q.id)),
-      ...pool.filter((q) => recent.has(q.id)),
-    ];
-
+  for (const [key, target] of shuffle([...targets.entries()], random)) {
+    const [axis, domain] = key.split("-") as [Axis, Domain];
+    const pool = shuffle(bank.filter((q) => q.axis === axis && q.domain === domain && q.isActive), random);
+    const preferred = [...pool.filter((q) => !recent.has(q.id)), ...pool.filter((q) => recent.has(q.id))];
+    const facets = shuffle([...new Set(pool.map((q) => q.facetId))], random);
+    const facetTargets = new Map<string, number>();
+    facets.forEach((facet, index) => facetTargets.set(facet, Math.floor(target / facets.length) + (index < target % facets.length ? 1 : 0)));
+    const responseTargets = new Map<ResponseType, number>([
+      ["selfMatch", selfTargets.get(key) ?? 0],
+      ["frequency", frequencyTargets.get(key) ?? 0],
+    ]);
+    responseTargets.set("directional", target - [...responseTargets.values()].reduce((sum, value) => sum + value, 0));
+    const directionTargets = new Map([[true, reverseTargets.get(key) ?? 0], [false, target - (reverseTargets.get(key) ?? 0)]]);
     const facetCounts = new Map<string, number>();
-    for (const q of preferred) {
-      if (chosen.filter((x) => x.axis === cell.axis && x.domain === cell.domain).length >= target) {
-        break;
-      }
-      if (chosenIds.has(q.id) || mirrorGroups.has(q.mirrorGroup)) continue;
-      if ((facetCounts.get(q.facet) ?? 0) >= 4) continue;
+    const responseCounts = new Map<ResponseType, number>();
+    const directionCounts = new Map<boolean, number>();
+    const cellChosen: Question[] = [];
 
-      chosen.push(q);
-      chosenIds.add(q.id);
-      mirrorGroups.add(q.mirrorGroup);
-      facetCounts.set(q.facet, (facetCounts.get(q.facet) ?? 0) + 1);
-    }
-
-    // 高题量下先放宽分面上限，仍保持当前维度与场景的目标题数。
-    for (const q of preferred) {
-      if (chosen.filter((x) => x.axis === cell.axis && x.domain === cell.domain).length >= target) {
-        break;
-      }
-      if (chosenIds.has(q.id) || mirrorGroups.has(q.mirrorGroup)) continue;
-
-      chosen.push(q);
-      chosenIds.add(q.id);
-      mirrorGroups.add(q.mirrorGroup);
+    while (cellChosen.length < target) {
+      const available = preferred.filter((q) => !chosenIds.has(q.id) && !mirrorGroups.has(q.mirrorGroup));
+      const facetNeeded = (q: Question) => (facetCounts.get(q.facetId) ?? 0) < (facetTargets.get(q.facetId) ?? 0);
+      const responseNeeded = (q: Question) => (responseCounts.get(q.responseType) ?? 0) < (responseTargets.get(q.responseType) ?? 0);
+      const directionNeeded = (q: Question) => (directionCounts.get(q.reverseScored) ?? 0) < (directionTargets.get(q.reverseScored) ?? 0);
+      const selectors = [
+        (q: Question) => facetNeeded(q) && responseNeeded(q) && directionNeeded(q),
+        (q: Question) => facetNeeded(q) && responseNeeded(q),
+        (q: Question) => responseNeeded(q) && directionNeeded(q),
+        (q: Question) => responseNeeded(q),
+        (q: Question) => facetNeeded(q) && directionNeeded(q),
+        (q: Question) => facetNeeded(q),
+        (q: Question) => directionNeeded(q),
+        () => true,
+      ];
+      const picked = selectors.map((selector) => available.find(selector)).find(Boolean);
+      if (!picked) break;
+      cellChosen.push(picked);
+      chosen.push(picked);
+      chosenIds.add(picked.id);
+      mirrorGroups.add(picked.mirrorGroup);
+      facetCounts.set(picked.facetId, (facetCounts.get(picked.facetId) ?? 0) + 1);
+      responseCounts.set(picked.responseType, (responseCounts.get(picked.responseType) ?? 0) + 1);
+      directionCounts.set(picked.reverseScored, (directionCounts.get(picked.reverseScored) ?? 0) + 1);
     }
   }
 
-  // 极端情况下补齐，但仍不重复题目。
+  // 极端情况下补齐，但仍不重复题目或镜像组。
   if (chosen.length < count) {
     for (const q of shuffle(bank, random)) {
       if (chosen.length >= count) break;
@@ -237,15 +275,30 @@ export function computeSessionResult(
   ) as SessionResult["domainAxes"];
 
   const facetScores: Record<string, number> = {};
-  const facets = [...new Set(questions.map((q) => q.facet))];
+  const facets = [...new Set(questions.map((q) => q.facetId))];
   for (const facet of facets) {
-    const facetQuestions = questions.filter((q) => q.facet === facet);
+    const facetQuestions = questions.filter((q) => q.facetId === facet);
     const values = facetQuestions
-      .map((q) => responses.get(q.id)?.score)
-      .filter((v): v is -1 | 0 | 1 => v !== null && v !== undefined);
+      .map((question) => {
+        const score = responses.get(question.id)?.score;
+        if (score === null || score === undefined) return undefined;
+        const normalized = normalizedScore(score);
+        return question.reverseScored ? normalized * -1 : normalized;
+      })
+      .filter((value): value is number => value !== undefined);
     const mean = values.length ? values.reduce<number>((a, b) => a + b, 0) / values.length : 0;
     facetScores[facet] = round1(((mean + 1) / 2) * 100);
   }
+
+  const responseTypeCounts = { selfMatch: 0, frequency: 0, directional: 0 };
+  questions.forEach((question) => { responseTypeCounts[question.responseType] += 1; });
+  const optionSelectionCounts: Record<string, number> = {};
+  answered.forEach((response) => {
+    if (response.selectedOptionId) optionSelectionCounts[response.selectedOptionId] = (optionSelectionCounts[response.selectedOptionId] ?? 0) + 1;
+  });
+  const dominantOptionRate = answered.length
+    ? Math.max(0, ...Object.values(optionSelectionCounts)) / answered.length
+    : 1;
 
   // 同一 mirrorGroup 在一次问卷中不会重复，因此这里保留 0。
   const contradictionRate = 0;
@@ -259,6 +312,10 @@ export function computeSessionResult(
     medianResponseMs: Math.round(medianResponseMs),
     tooFastRate: round1(tooFastRate * 100) / 100,
     qualityWeight: round1(qualityWeight * 100) / 100,
+    bankVersion: questions[0]?.version ?? "legacy",
+    responseTypeCounts,
+    optionSelectionCounts,
+    dominantOptionRate: round1(dominantOptionRate * 100) / 100,
     axes,
     domainAxes,
     facetScores,
