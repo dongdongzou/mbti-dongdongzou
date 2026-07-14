@@ -318,8 +318,9 @@ function RunResultView({ sessionId, navigate }: { sessionId: string; navigate: (
         <button className="primary-button" onClick={() => navigate(completedRuns >= 2 ? "/report" : "/setup")}>{completedRuns >= 2 ? "查看聚合报告" : "开始下一轮"} <span>→</span></button>
         <button className="secondary-button" onClick={async () => {
           const text = `我的 InnerCompass 16 初步画像是 ${typeCode} · ${profile?.title}`;
-          if (navigator.share) await navigator.share({ title: "InnerCompass 16", text, url: window.location.origin });
-          else await navigator.clipboard.writeText(`${text} ${window.location.origin}`);
+          const shareUrl = window.location.hostname.endsWith("github.io") ? window.location.href.split("#")[0] : window.location.origin;
+          if (navigator.share) await navigator.share({ title: "InnerCompass 16", text, url: shareUrl });
+          else await navigator.clipboard.writeText(`${text} ${shareUrl}`);
         }}>分享结果</button>
       </div>
       <p className="disclaimer centered">单轮结果容易受当下状态与计时压力影响，建议完成 3 轮再观察稳定偏好。</p>
@@ -415,12 +416,25 @@ export function InnerCompassApp() {
   const [path, setPath] = useState("/");
   const [revision, setRevision] = useState(0);
   useEffect(() => {
-    const sync = window.setTimeout(() => setPath(window.location.pathname), 0);
-    const onPop = () => setPath(window.location.pathname);
+    const currentPath = () => window.location.hostname.endsWith("github.io")
+      ? window.location.hash.replace(/^#/, "") || "/"
+      : window.location.pathname;
+    const sync = window.setTimeout(() => setPath(currentPath()), 0);
+    const onPop = () => setPath(currentPath());
     window.addEventListener("popstate", onPop);
-    return () => { window.clearTimeout(sync); window.removeEventListener("popstate", onPop); };
+    window.addEventListener("hashchange", onPop);
+    return () => {
+      window.clearTimeout(sync);
+      window.removeEventListener("popstate", onPop);
+      window.removeEventListener("hashchange", onPop);
+    };
   }, []);
-  const navigate = useCallback((next: string) => { window.history.pushState({}, "", next); setPath(next); window.scrollTo({ top: 0, behavior: "smooth" }); }, []);
+  const navigate = useCallback((next: string) => {
+    if (window.location.hostname.endsWith("github.io")) window.location.hash = next;
+    else window.history.pushState({}, "", next);
+    setPath(next);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
   if (path === "/setup") return <SetupView navigate={navigate} />;
   if (path === "/history") return <HistoryView navigate={navigate} refresh={() => setRevision((value) => value + 1)} />;
   if (path === "/report") return <ReportView navigate={navigate} />;
