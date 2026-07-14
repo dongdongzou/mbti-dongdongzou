@@ -84,6 +84,10 @@ button:focus-visible { outline:3px solid rgba(22,119,255,.28); outline-offset:3p
 .option-list button.chosen>span { color:#fff; background:var(--blue); }
 .option-list b { font-size:16px; line-height:1.55; font-weight:610; }
 .option-list i { color:#b8bec8; font-style:normal; font-size:20px; }
+.agreement-scale { display:grid; grid-template-columns:repeat(3,1fr); }
+.agreement-scale button { min-height:112px; grid-template-columns:1fr; place-items:center; text-align:center; gap:9px; padding:18px; }
+.agreement-scale button>span { width:34px; height:34px; }
+.agreement-scale b { font-size:17px; }
 .test-hint { margin:28px 0 0; text-align:center; color:#9aa0aa; font-size:12px; }
 
 .result-hero { max-width:760px; margin:0 auto; padding:82px 0 54px; text-align:center; }
@@ -190,6 +194,8 @@ button:focus-visible { outline:3px solid rgba(22,119,255,.28); outline-offset:3p
   .question-stage { padding:58px 0 54px; }
   .question-stage h1 { min-height:128px; margin-bottom:28px; font-size:30px; }
   .option-list button { min-height:68px; padding-right:14px; }
+  .agreement-scale { grid-template-columns:repeat(3,1fr); gap:8px; }
+  .agreement-scale button { min-height:96px; padding:12px 8px; }
   .report-card,.switch-card { padding:27px 22px; border-radius:22px; }
   .report-header { min-height:0; padding:54px 8px 36px; flex-direction:column; text-align:center; }
   .report-header h1 { font-size:82px; }

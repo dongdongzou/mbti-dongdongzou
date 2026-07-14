@@ -2,10 +2,10 @@
   "appName": "InnerCompass 16",
   "positioning": "基于 MBTI 四偏好框架的非官方生活与关系自我探索工具",
   "session": {
-    "defaultQuestionCount": 64,
-    "minQuestionCount": 50,
-    "maxQuestionCount": 80,
-    "questionTimeoutMs": 12000,
+    "defaultQuestionCount": 100,
+    "minQuestionCount": 80,
+    "maxQuestionCount": 120,
+    "questionTimeoutMs": 8000,
     "advanceAfterChoiceMs": 160,
     "allowBack": false,
     "allowPause": false,
@@ -19,13 +19,13 @@
     "balanceDomains": true,
     "avoidSameMirrorGroupInSession": true,
     "avoidQuestionIdsFromRecentRuns": 3,
-    "maxItemsPerFacetPerSession": 3,
-    "defaultPerAxisAt64": 16,
-    "defaultPerAxisDomainAt64": 8
+    "maxItemsPerFacetPerSession": 4,
+    "defaultPerAxisAt100": 25,
+    "defaultPerAxisDomainAt100": 12.5
   },
   "validation": {
-    "recommendedRuns": 3,
-    "minimumRunsForStableReport": 2,
+    "recommendedRuns": 1,
+    "minimumRunsForStableReport": 1,
     "idealIntervalHours": [
       12,
       168

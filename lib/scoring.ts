@@ -108,19 +108,19 @@ function scoreAxis(
 
 /**
  * 分层抽题：
- * 1. 题数限制在 50–80；
+ * 1. 题数限制在 80–120；
  * 2. EI/SN/TF/JP 与 life/relationship 尽量均衡；
- * 3. 同一 mirrorGroup 在单轮最多出现一次；
- * 4. 优先避开最近三轮出现过的题；
+ * 3. 同一 mirrorGroup 在一次问卷中最多出现一次；
+ * 4. 再次填写时优先避开最近出现过的题；
  * 5. 最后统一洗牌，前端不展示维度。
  */
 export function selectQuestions(
   bank: Question[],
-  requestedCount = 64,
+  requestedCount = 100,
   recentQuestionIds: string[] = [],
   seed = Date.now(),
 ): Question[] {
-  const count = Math.round(clamp(requestedCount, 50, 80));
+  const count = Math.round(clamp(requestedCount, 80, 120));
   const random = mulberry32(seed);
   const recent = new Set(recentQuestionIds);
 
@@ -160,12 +160,24 @@ export function selectQuestions(
         break;
       }
       if (chosenIds.has(q.id) || mirrorGroups.has(q.mirrorGroup)) continue;
-      if ((facetCounts.get(q.facet) ?? 0) >= 3) continue;
+      if ((facetCounts.get(q.facet) ?? 0) >= 4) continue;
 
       chosen.push(q);
       chosenIds.add(q.id);
       mirrorGroups.add(q.mirrorGroup);
       facetCounts.set(q.facet, (facetCounts.get(q.facet) ?? 0) + 1);
+    }
+
+    // 高题量下先放宽分面上限，仍保持当前维度与场景的目标题数。
+    for (const q of preferred) {
+      if (chosen.filter((x) => x.axis === cell.axis && x.domain === cell.domain).length >= target) {
+        break;
+      }
+      if (chosenIds.has(q.id) || mirrorGroups.has(q.mirrorGroup)) continue;
+
+      chosen.push(q);
+      chosenIds.add(q.id);
+      mirrorGroups.add(q.mirrorGroup);
     }
   }
 
@@ -235,8 +247,7 @@ export function computeSessionResult(
     facetScores[facet] = round1(((mean + 1) / 2) * 100);
   }
 
-  // 同一 mirrorGroup 的两个版本在多轮中出现时，可由持久层进一步计算。
-  // 单轮通常禁止同组同时出现，因此这里保留 0，聚合时从历史回答计算。
+  // 同一 mirrorGroup 在一次问卷中不会重复，因此这里保留 0。
   const contradictionRate = 0;
 
   return {
