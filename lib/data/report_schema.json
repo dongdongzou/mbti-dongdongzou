@@ -1,0 +1,102 @@
+{
+  "reportSections": [
+    {
+      "id": "result_header",
+      "title": "总体结果",
+      "required": [
+        "typeCode",
+        "typeTitle",
+        "overallConfidence",
+        "runCount",
+        "answeredCount"
+      ]
+    },
+    {
+      "id": "axis_distribution",
+      "title": "四维度占比",
+      "required": [
+        "E/I",
+        "S/N",
+        "T/F",
+        "J/P",
+        "boundaryLabel",
+        "stabilityLabel"
+      ],
+      "visual": "4组双向百分比条形图"
+    },
+    {
+      "id": "behavior_logic",
+      "title": "行为逻辑",
+      "instruction": "解释用户如何获取能量、处理信息、做决定和安排生活；使用倾向性语言，不把结果写成绝对人格。"
+    },
+    {
+      "id": "psychological_overview",
+      "title": "心理概述",
+      "instruction": "描述注意力、需要、压力触发点和自我保护方式。禁止诊断依恋障碍、人格障碍、抑郁或其他疾病。"
+    },
+    {
+      "id": "life_features",
+      "title": "生活特性分值",
+      "required": [
+        "外部互动驱动",
+        "独处恢复需求",
+        "现实落地度",
+        "可能性探索度",
+        "逻辑决策度",
+        "情感顾及度",
+        "计划闭环度",
+        "灵活应变度"
+      ]
+    },
+    {
+      "id": "relationship_profile",
+      "title": "感情与亲密关系模式",
+      "required": [
+        "靠近方式",
+        "表达方式",
+        "冲突处理",
+        "安全感来源",
+        "容易误解之处",
+        "适配沟通建议"
+      ]
+    },
+    {
+      "id": "cross_domain_gap",
+      "title": "生活与感情差异",
+      "instruction": "当同一维度生活域与感情域相差12分以上时，必须解释这种场景切换，而不是强行归入单一标签。"
+    },
+    {
+      "id": "strengths",
+      "title": "优势特点",
+      "instruction": "输出4到6条，每条必须关联具体维度或分面证据。"
+    },
+    {
+      "id": "growth",
+      "title": "成长建议",
+      "instruction": "输出4到6条可执行建议，避免空泛鼓励和价值评判。"
+    },
+    {
+      "id": "data_quality",
+      "title": "结果可信度",
+      "required": [
+        "完成率",
+        "平均或中位反应时间",
+        "多轮标准差",
+        "临界维度",
+        "漏答率"
+      ]
+    },
+    {
+      "id": "disclaimer",
+      "title": "使用说明",
+      "text": "本结果是基于原创情境题的偏好估计，用于自我观察，不是官方 MBTI 认证结果，也不构成医学、心理诊断或招聘判断。"
+    }
+  ],
+  "narrativeRules": {
+    "nearBoundary": "任一维度在47–53之间时，描述为“情境型/接近中线”，仍可给出类型字母，但必须降低确定语气。",
+    "domainGap": "生活与感情域同轴差值>=12，单独生成“场景切换”说明。",
+    "unstable": "多轮标准差>12时，提示可能受到当期状态、题量、计时压力或场景差异影响。",
+    "lowCompletion": "完成率<80%时，不输出强确定结论，优先建议再测。",
+    "singleRun": "只有一轮时显示“初步画像”，两轮显示“待验证画像”，三轮及以上才显示“稳定画像”。"
+  }
+}
