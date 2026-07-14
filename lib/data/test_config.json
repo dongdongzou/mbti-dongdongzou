@@ -5,7 +5,7 @@
     "defaultQuestionCount": 64,
     "minQuestionCount": 50,
     "maxQuestionCount": 80,
-    "questionTimeoutMs": 5000,
+    "questionTimeoutMs": 12000,
     "advanceAfterChoiceMs": 160,
     "allowBack": false,
     "allowPause": false,

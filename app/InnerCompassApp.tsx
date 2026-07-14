@@ -10,7 +10,10 @@ import type { AggregateResult, Axis, Question, ResponseRecord, SessionResult } f
 
 const STORE_KEY = "innercompass16:v1";
 const AXES: Axis[] = ["EI", "SN", "TF", "JP"];
-const bank = questionBankJson.questions as unknown as Question[];
+const bank = questionBankJson.questions.map((question) => ({
+  ...question,
+  timeoutMs: config.session.questionTimeoutMs,
+})) as unknown as Question[];
 
 type TypeProfile = {
   title: string;
@@ -142,7 +145,7 @@ function HomeView({ navigate, revision }: { navigate: (path: string) => void; re
           {!active && completed.length > 0 && <button className="secondary-button" onClick={() => navigate("/report")}>查看聚合报告</button>}
         </div>
         <div className="trust-row">
-          <span><b>64</b> 题 / 轮</span><i /><span><b>5</b> 秒直觉作答</span><i /><span>建议完成 <b>3</b> 轮</span>
+          <span><b>64</b> 题 / 轮</span><i /><span><b>12</b> 秒直觉作答</span><i /><span>建议完成 <b>3</b> 轮</span>
         </div>
       </section>
       <section className="feature-grid">
@@ -176,14 +179,14 @@ function SetupView({ navigate }: { navigate: (path: string) => void }) {
       <section className="setup-card">
         <div className="step-label">开始前 · 选择本轮题量</div>
         <h1>给自己一段<br />不被打扰的时间。</h1>
-        <p>每题最多 5 秒，没有标准答案。请选择此刻更自然的反应。</p>
+        <p>每题最多 12 秒，没有标准答案。请选择此刻更自然的反应。</p>
         <div className="count-selector" role="radiogroup" aria-label="题目数量">
           {[50, 64, 80].map((value) => <button key={value} role="radio" aria-checked={count === value} className={count === value ? "selected" : ""} onClick={() => setCount(value)}><b>{value}</b><span>题</span>{value === 64 && <em>推荐</em>}</button>)}
         </div>
         <div className="setup-summary">
-          <div><span>预计用时</span><b>约 {Math.ceil(count * 5 / 60)}–{Math.ceil(count * 7 / 60)} 分钟</b></div>
+          <div><span>预计用时</span><b>约 {Math.ceil(count * 8 / 60)}–{Math.ceil(count * 12 / 60)} 分钟</b></div>
           <div><span>场景配比</span><b>生活 50% · 关系 50%</b></div>
-          <div><span>计时规则</span><b>每题 5 秒 · 不可返回</b></div>
+          <div><span>计时规则</span><b>每题 12 秒 · 不可返回</b></div>
         </div>
         <button className="primary-button wide" onClick={start}>我准备好了 <span>→</span></button>
         <p className="microcopy">键盘可使用 A / B / C 或 1 / 2 / 3 作答</p>
