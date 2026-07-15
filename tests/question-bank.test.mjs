@@ -29,7 +29,7 @@ function response(question, option, elapsedMs = 3000) {
 }
 
 test("只加载 SHA-256 一致的 DONGDONGZOU v2 正式题库", () => {
-  assert.equal(createHash("sha256").update(bankRaw).digest("hex"), "2b17486a06d7639a877dcf16c23dee46b9a94efe000ddc7a373deb220045ace3");
+  assert.equal(createHash("sha256").update(bankRaw).digest("hex"), "f662c020ca3b073807334fac834d317688f30b38991c26979e31c29ca95c7447");
   assert.equal(bank.meta.version, "2.0.0");
   assert.equal(questions.length, 640);
   assert.equal(questions[0].id, "DDZ-Q0001");
@@ -97,10 +97,10 @@ test("计分只读取选项 axisScore 与 traitScore，不根据 A/B/C 位置推
   assert.equal(computeSessionResult("negative", [negativeFirst], [response(negativeFirst, negativeFirst.options[0])]).axes[negativeFirst.axis].rightPercent, 0);
 });
 
-test("8 秒超时不计为中立答案", () => {
+test("12 秒超时不计为中立答案", () => {
   const question = questions[0];
-  const result = computeSessionResult("timeout", [question], [response(question, undefined, 8000)]);
-  assert.equal(question.timeoutMs, 8000);
+  const result = computeSessionResult("timeout", [question], [response(question, undefined, 12000)]);
+  assert.equal(question.timeoutMs, 12000);
   assert.equal(result.answeredCount, 0);
   assert.equal(result.completionRate, 0);
   assert.equal(result.axes[question.axis].timedOut, 1);

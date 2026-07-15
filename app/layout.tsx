@@ -4,7 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   metadataBase: new URL("https://dongdongzou.github.io/mbti-dongdongzou/"),
   title: "InnerCompass 16｜看见你的行为偏好",
-  description: "从 DONGDONGZOU 生活与感情原创题库 v2 的 640 道生活化情境题中完成 80、100 或 120 题，用 8 秒直觉作答看见 32 项行为特质。",
+  description: "从 DONGDONGZOU 生活与感情原创题库 v2 的 640 道生活化情境题中完成 80、100 或 120 题，用 12 秒直觉作答看见 32 项行为特质。",
   openGraph: {
     title: "InnerCompass 16",
     description: "生活与感情原创题库 v2｜640 道生活化情境题 · 32 项行为特质",

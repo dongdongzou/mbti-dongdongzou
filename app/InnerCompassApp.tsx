@@ -160,7 +160,7 @@ function HomeView({ navigate, revision }: { navigate: (path: string) => void; re
           {!active && completed.length > 0 && <button className="secondary-button" onClick={() => navigate(`/run-result/${completed[0].id}`)}>查看最近结果</button>}
         </div>
         <div className="trust-row">
-          <span><b>80–120</b> 题</span><i /><span><b>8</b> 秒快速判断</span><i /><span>完成 <b>1</b> 次即可</span>
+          <span><b>80–120</b> 题</span><i /><span><b>12</b> 秒快速判断</span><i /><span>完成 <b>1</b> 次即可</span>
         </div>
       </section>
       <section className="feature-grid">
@@ -194,14 +194,14 @@ function SetupView({ navigate }: { navigate: (path: string) => void }) {
       <section className="setup-card">
         <div className="step-label">开始前 · 选择本次题量</div>
         <h1>给自己一段<br />不被打扰的时间。</h1>
-        <p>每题最多 8 秒，没有标准答案。请选择此刻更自然的反应。</p>
+        <p>每题最多 12 秒，没有标准答案。请选择此刻更自然的反应。</p>
         <div className="count-selector" role="radiogroup" aria-label="题目数量">
           {[80, 100, 120].map((value) => <button key={value} role="radio" aria-checked={count === value} className={count === value ? "selected" : ""} onClick={() => setCount(value)}><b>{value}</b><span>题</span>{value === 100 && <em>推荐</em>}</button>)}
         </div>
         <div className="setup-summary">
-          <div><span>预计用时</span><b>约 {Math.ceil(count * 6 / 60)}–{Math.ceil(count * 8 / 60)} 分钟</b></div>
+          <div><span>预计用时</span><b>约 {Math.ceil(count * 8 / 60)}–{Math.ceil(count * 12 / 60)} 分钟</b></div>
           <div><span>场景配比</span><b>生活 50% · 关系 50%</b></div>
-          <div><span>计时规则</span><b>每题 8 秒 · 不可返回</b></div>
+          <div><span>计时规则</span><b>每题 12 秒 · 不可返回</b></div>
         </div>
         <button className="primary-button wide" onClick={start}>我准备好了 <span>→</span></button>
         <p className="microcopy">键盘可使用 A / B / C 或 1 / 2 / 3 作答</p>

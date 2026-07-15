@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { selectDongDongZouQuestions, validateDongDongZouBank } from "../lib/dongdongzouQuestionBankSelector.ts";
 
 const BANK_PATH = "lib/data/DONGDONGZOU_MBTI_QUESTION_BANK_640_v2.json";
-const EXPECTED_SHA256 = "2b17486a06d7639a877dcf16c23dee46b9a94efe000ddc7a373deb220045ace3";
+const EXPECTED_SHA256 = "f662c020ca3b073807334fac834d317688f30b38991c26979e31c29ca95c7447";
 const raw = await readFile(BANK_PATH);
 const bank = JSON.parse(raw.toString("utf8"));
 const questions = bank.questions;
@@ -51,7 +51,7 @@ for (const question of questions) {
   }
   if (question.bankVersion !== "2.0.0") errors.push(`${question.id} 版本错误`);
   if (!question.isActive || !question.isOriginal) errors.push(`${question.id} 必须是启用的原创题`);
-  if (question.timeoutMs !== 8000) errors.push(`${question.id} 超时应为 8000ms`);
+  if (question.timeoutMs !== 12000) errors.push(`${question.id} 超时应为 12000ms`);
   if (question.prompt.length > 48 || question.readingLength !== question.prompt.length) errors.push(`${question.id} 题干长度错误`);
   if (question.options.length !== 3) errors.push(`${question.id} 必须有三个选项`);
   const axisScores = question.options.map((option) => option.axisScore).sort((a, b) => a - b).join(",");

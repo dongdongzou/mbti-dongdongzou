@@ -30,7 +30,7 @@ export interface Question {
   reverseScored: boolean;
   readingLength: number;
   estimatedReadingMs: number;
-  timeoutMs: 8000;
+  timeoutMs: 12000;
   weight: number;
   isOriginal: true;
   isActive: boolean;

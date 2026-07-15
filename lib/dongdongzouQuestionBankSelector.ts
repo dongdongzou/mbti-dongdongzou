@@ -234,8 +234,8 @@ export function validateDongDongZouBank(bank: Question[]): void {
     if (q.bankVersion !== "2.0.0") {
       errors.push(`${q.id}: wrong bankVersion ${q.bankVersion}`);
     }
-    if (q.timeoutMs !== 8000) {
-      errors.push(`${q.id}: timeoutMs must be 8000`);
+    if (q.timeoutMs !== 12000) {
+      errors.push(`${q.id}: timeoutMs must be 12000`);
     }
     if (q.options.length !== 3) {
       errors.push(`${q.id}: expected exactly 3 options`);
