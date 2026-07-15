@@ -40,6 +40,25 @@ export type AxisInsight = {
 
 const traits = traitCatalogJson.traits as TraitCatalogItem[];
 
+const legacyTraitIds: Record<string, string> = {
+  L_E_SOCIAL: "life_social_initiative", L_I_RECOVER: "life_solitude_recovery",
+  L_E_EXPRESS: "life_instant_expression", L_I_THINK: "life_independent_thinking",
+  L_S_DETAIL: "life_detail_attention", L_N_PATTERN: "life_pattern_insight",
+  L_S_PRACTICAL: "life_practical_grounding", L_N_POSSIBILITY: "life_possibility_exploration",
+  L_T_LOGIC: "life_logic_analysis", L_F_EMOTION: "life_emotion_awareness",
+  L_T_PRINCIPLE: "life_principle_judgment", L_F_RELATION: "life_relationship_consideration",
+  L_J_PLAN: "life_planning_organization", L_P_EXPLORE: "life_free_exploration",
+  L_J_CLOSURE: "life_result_closure", L_P_ADAPT: "life_adaptive_flexibility",
+  R_E_APPROACH: "relationship_active_approach", R_I_SPACE: "relationship_personal_space",
+  R_E_RESPONSE: "relationship_emotional_expression", R_I_PROCESS: "relationship_internal_processing",
+  R_S_FACT: "relationship_factual_communication", R_N_SIGNAL: "relationship_implicit_signal",
+  R_S_ACTION: "relationship_action_trust", R_N_DEPTH: "relationship_deep_understanding",
+  R_T_SOLVE: "relationship_problem_solving", R_F_HOLD: "relationship_emotional_holding",
+  R_T_BOUNDARY: "relationship_boundary_clarity", R_F_HARMONY: "relationship_harmony_maintenance",
+  R_J_COMMIT: "relationship_commitment_need", R_P_FLEX: "relationship_flexibility",
+  R_J_REPAIR: "relationship_conflict_repair", R_P_NATURAL: "relationship_response_sensitivity",
+};
+
 const axisCopy: Record<Axis, {
   title: string;
   definition: string;
@@ -140,7 +159,7 @@ function strength(percent: number): string {
 }
 
 function traitInsight(item: TraitCatalogItem, result: SessionResult): TraitInsight {
-  const score = Math.round(result.facetScores[item.id] ?? 50);
+  const score = Math.round(result.facetScores[item.id] ?? result.facetScores[legacyTraitIds[item.id]] ?? 50);
   const level = score >= 65 ? "high" : score <= 35 ? "low" : "balanced";
   const interpretation = level === "high"
     ? `你较常通过${item.behavior}。这是一种稳定可用的行为资源，但不代表你只能这样反应。`
@@ -247,24 +266,24 @@ export function composeReport(result: SessionResult, completedRuns: SessionResul
     relationshipSummary: `亲密关系中，你较常通过${relationshipTraits.slice(0, 3).map((item) => item.behavior).join("、")}表达和维持关系。`,
     lifeTopics: [
       { title: "精力恢复", text: axisBy.EI.life },
-      { title: "社交方式", text: `${traitBy.life_social_initiative.interpretation} ${traitBy.life_solitude_recovery.interpretation}` },
+      { title: "社交方式", text: `${traitBy.L_E_SOCIAL.interpretation} ${traitBy.L_I_RECOVER.interpretation}` },
       { title: "信息处理", text: axisBy.SN.life },
       { title: "决策方式", text: axisBy.TF.life },
       { title: "学习特点", text: axisBy.SN.work },
-      { title: "工作推进", text: `${axisBy.JP.work} 计划组织度为 ${traitBy.life_planning_organization.score}，结果闭环度为 ${traitBy.life_result_closure.score}。` },
-      { title: "面对变化", text: `${traitBy.life_adaptive_flexibility.interpretation} 当前得分 ${traitBy.life_adaptive_flexibility.score}。` },
-      { title: "消费与资源", text: `你会在${traitBy.life_detail_attention.behavior}与${traitBy.life_possibility_exploration.behavior}之间分配注意力；两项得分分别为 ${traitBy.life_detail_attention.score} 和 ${traitBy.life_possibility_exploration.score}。` },
-      { title: "日常秩序", text: `${traitBy.life_planning_organization.interpretation} ${traitBy.life_free_exploration.interpretation}` },
+      { title: "工作推进", text: `${axisBy.JP.work} 计划组织度为 ${traitBy.L_J_PLAN.score}，结果闭环度为 ${traitBy.L_J_CLOSURE.score}。` },
+      { title: "面对变化", text: `${traitBy.L_P_ADAPT.interpretation} 当前得分 ${traitBy.L_P_ADAPT.score}。` },
+      { title: "消费与资源", text: `你会在${traitBy.L_S_DETAIL.behavior}与${traitBy.L_N_POSSIBILITY.behavior}之间分配注意力；两项得分分别为 ${traitBy.L_S_DETAIL.score} 和 ${traitBy.L_N_POSSIBILITY.score}。` },
+      { title: "日常秩序", text: `${traitBy.L_J_PLAN.interpretation} ${traitBy.L_P_EXPLORE.interpretation}` },
       { title: "压力下表现", text: `压力升高时，最强的 ${strongestAxes[0].dominantPole} 偏好（${strongestAxes[0].dominantPercent}%）可能更快接管反应；可以主动调用 ${strongestAxes[0].otherPole} 侧能力扩大选择。` },
     ],
     relationshipTopics: [
-      { title: "如何靠近一个人", text: `${traitBy.relationship_active_approach.interpretation} 当前得分 ${traitBy.relationship_active_approach.score}。` },
-      { title: "如何表达喜欢", text: `${traitBy.relationship_emotional_expression.interpretation} 你也可能通过${traitBy.relationship_action_trust.behavior}表达在意。` },
-      { title: "如何确认安全感", text: `${traitBy.relationship_commitment_need.interpretation} 个人空间得分为 ${traitBy.relationship_personal_space.score}，两者共同决定你需要的连接节奏。` },
-      { title: "如何理解对方", text: `${traitBy.relationship_factual_communication.interpretation} ${traitBy.relationship_implicit_signal.interpretation}` },
-      { title: "面对冷淡和不确定", text: `回应敏感度为 ${traitBy.relationship_response_sensitivity.score}，深层理解为 ${traitBy.relationship_deep_understanding.score}。信息不足时，你可能在核对事实与推演原因之间来回切换。` },
-      { title: "如何处理冲突", text: `${traitBy.relationship_problem_solving.interpretation} ${traitBy.relationship_emotional_holding.interpretation}` },
-      { title: "为什么可能突然抽离", text: `当个人空间（${traitBy.relationship_personal_space.score}）或内部消化（${traitBy.relationship_internal_processing.score}）需求升高时，你可能先减少互动以恢复秩序；这不自动等于不在意。` },
+      { title: "如何靠近一个人", text: `${traitBy.R_E_APPROACH.interpretation} 当前得分 ${traitBy.R_E_APPROACH.score}。` },
+      { title: "如何表达喜欢", text: `${traitBy.R_E_RESPONSE.interpretation} 你也可能通过${traitBy.R_S_ACTION.behavior}表达在意。` },
+      { title: "如何确认安全感", text: `${traitBy.R_J_COMMIT.interpretation} 个人空间得分为 ${traitBy.R_I_SPACE.score}，两者共同决定你需要的连接节奏。` },
+      { title: "如何理解对方", text: `${traitBy.R_S_FACT.interpretation} ${traitBy.R_N_SIGNAL.interpretation}` },
+      { title: "面对冷淡和不确定", text: `回应敏感度为 ${traitBy.R_E_RESPONSE.score}，深层理解为 ${traitBy.R_N_DEPTH.score}。信息不足时，你可能在核对事实与推演原因之间来回切换。` },
+      { title: "如何处理冲突", text: `${traitBy.R_T_SOLVE.interpretation} ${traitBy.R_F_HOLD.interpretation}` },
+      { title: "为什么可能突然抽离", text: `当个人空间（${traitBy.R_I_SPACE.score}）或内部消化（${traitBy.R_I_PROCESS.score}）需求升高时，你可能先减少互动以恢复秩序；这不自动等于不在意。` },
       { title: "更适合的沟通方式", text: `把事实、感受和下一步分开表达会更清楚。你可以直接使用这个动作：${relationshipTraits[0].action}。` },
     ],
     strengths: traitScores.slice(0, 6).map((item) => ({ title: `${item.name} · ${item.score}`, text: item.interpretation })),

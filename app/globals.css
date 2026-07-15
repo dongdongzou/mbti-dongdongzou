@@ -25,6 +25,7 @@ button:focus-visible { outline:3px solid rgba(22,119,255,.28); outline-offset:3p
 .hero h1 { margin:30px 0 24px; font-size:clamp(48px,7.2vw,88px); line-height:1.06; letter-spacing:-.068em; font-weight:760; }
 .hero h1 span { color:var(--blue); position:relative; white-space:nowrap; }
 .hero-copy { max-width:620px; margin:0 auto; color:var(--muted); font-size:18px; line-height:1.85; }
+.upgrade-notice { max-width:660px; margin:24px auto 0; padding:14px 18px; border:1px solid #d8e8ff; border-radius:16px; background:#f3f8ff; color:#315f99; font-size:13px; line-height:1.7; }
 .hero-actions { margin:42px auto 0; display:flex; justify-content:center; gap:12px; flex-wrap:wrap; }
 .primary-button,.secondary-button { min-height:56px; border-radius:16px; padding:0 25px; font-weight:680; border:1px solid transparent; cursor:pointer; transition:transform .16s ease,box-shadow .16s ease,background .16s ease; }
 .primary-button { background:var(--blue); color:#fff; box-shadow:0 12px 30px rgba(22,119,255,.24); }

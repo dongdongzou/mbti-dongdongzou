@@ -4,7 +4,6 @@ import type {
   AxisScore,
   Domain,
   Question,
-  ResponseType,
   ResponseRecord,
   SessionResult,
 } from "./schemas";
@@ -26,51 +25,9 @@ function round1(value: number): number {
   return Math.round(value * 10) / 10;
 }
 
-function normalizedScore(score: ResponseRecord["score"]): number {
+function normalizedScore(score: -2 | 0 | 2 | null): number {
   if (score === null) return 0;
-  return clamp(score / (Math.abs(score) > 1 ? 2 : 1), -1, 1);
-}
-
-function mulberry32(seed: number): () => number {
-  return () => {
-    let t = (seed += 0x6d2b79f5);
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function shuffle<T>(items: T[], random: () => number): T[] {
-  const result = [...items];
-  for (let i = result.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(random() * (i + 1));
-    [result[i], result[j]] = [result[j], result[i]];
-  }
-  return result;
-}
-
-function constrainedOrder(items: Question[], random: () => number): Question[] {
-  const remaining = shuffle(items, random);
-  const ordered: Question[] = [];
-
-  while (remaining.length) {
-    const recent = ordered.slice(-2);
-    const valid = remaining
-      .map((question, index) => ({ question, index }))
-      .filter(({ question }) =>
-        !(recent.length === 2 &&
-          (recent.every((item) => item.axis === question.axis) ||
-            recent.every((item) => item.domain === question.domain))),
-      );
-    const pool = valid.length
-      ? valid
-      : remaining.map((question, index) => ({ question, index }));
-    const picked = pool[Math.floor(random() * pool.length)];
-    ordered.push(picked.question);
-    remaining.splice(picked.index, 1);
-  }
-
-  return ordered;
+  return clamp(score / 2, -1, 1);
 }
 
 function boundaryLabel(margin: number): AxisScore["boundaryLabel"] {
@@ -89,12 +46,12 @@ function scoreAxis(
   const axisQuestions = questions.filter((q) => q.axis === axis);
   const answered = axisQuestions
     .map((q) => responses.get(q.id))
-    .filter((r): r is ResponseRecord => Boolean(r && r.score !== null));
+    .filter((r): r is ResponseRecord => Boolean(r && r.axisScore !== null));
 
   const mean =
     answered.length === 0
       ? 0
-      : answered.reduce((sum, r) => sum + normalizedScore(r.score), 0) / answered.length;
+      : answered.reduce((sum, r) => sum + normalizedScore(r.axisScore), 0) / answered.length;
 
   const rightPercent = round1(clamp(((mean + 1) / 2) * 100, 0, 100));
   const leftPercent = round1(100 - rightPercent);
@@ -113,134 +70,13 @@ function scoreAxis(
   };
 }
 
-function allocateAcrossCells(
-  total: number,
-  cellTargets: Map<string, number>,
-  random: () => number,
-): Map<string, number> {
-  const grandTotal = [...cellTargets.values()].reduce((sum, value) => sum + value, 0);
-  const result = new Map<string, number>();
-  const fractions: Array<{ key: string; fraction: number }> = [];
-  let assigned = 0;
-  for (const [key, target] of cellTargets) {
-    const exact = total * target / grandTotal;
-    const base = Math.floor(exact);
-    result.set(key, base);
-    fractions.push({ key, fraction: exact - base + random() * 0.0001 });
-    assigned += base;
-  }
-  for (const item of fractions.sort((a, b) => b.fraction - a.fraction)) {
-    if (assigned >= total) break;
-    result.set(item.key, (result.get(item.key) ?? 0) + 1);
-    assigned += 1;
-  }
-  return result;
-}
-
-function cellTargetsFor(count: number, seed: number): Map<string, number> {
-  if (count === 80 || count === 120) {
-    const each = count / 8;
-    return new Map(AXES.flatMap((axis) => DOMAINS.map((domain) => [`${axis}-${domain}`, each] as const)));
-  }
-  if (count === 100) {
-    const lifeHigh = seed % 2 === 0 ? new Set<Axis>(["EI", "TF"]) : new Set<Axis>(["SN", "JP"]);
-    return new Map(AXES.flatMap((axis) => [
-      [`${axis}-life`, lifeHigh.has(axis) ? 13 : 12] as const,
-      [`${axis}-relationship`, lifeHigh.has(axis) ? 12 : 13] as const,
-    ]));
-  }
-
-  const cells = AXES.flatMap((axis) => DOMAINS.map((domain) => `${axis}-${domain}`));
-  const base = Math.floor(count / cells.length);
-  return new Map(cells.map((key, index) => [key, base + (index < count % cells.length ? 1 : 0)]));
-}
-
-/** 分层抽题：固定维度/场景配额，同时约束 32 特质、答案模板、正反向与镜像组。 */
-export function selectQuestions(
-  bank: Question[],
-  requestedCount = 100,
-  recentQuestionIds: string[] = [],
-  seed = Date.now(),
-): Question[] {
-  const count = Math.round(clamp(requestedCount, 80, 120));
-  const random = mulberry32(seed);
-  const recent = new Set(recentQuestionIds);
-  const targets = cellTargetsFor(count, seed);
-  const selfTargets = allocateAcrossCells(Math.round(count * 0.7), targets, random);
-  const frequencyTargets = allocateAcrossCells(Math.round(count * 0.2), targets, random);
-  const reverseTargets = allocateAcrossCells(Math.floor(count / 2), targets, random);
-
-  const chosen: Question[] = [];
-  const chosenIds = new Set<string>();
-  const mirrorGroups = new Set<string>();
-
-  for (const [key, target] of shuffle([...targets.entries()], random)) {
-    const [axis, domain] = key.split("-") as [Axis, Domain];
-    const pool = shuffle(bank.filter((q) => q.axis === axis && q.domain === domain && q.isActive), random);
-    const preferred = [...pool.filter((q) => !recent.has(q.id)), ...pool.filter((q) => recent.has(q.id))];
-    const facets = shuffle([...new Set(pool.map((q) => q.facetId))], random);
-    const facetTargets = new Map<string, number>();
-    facets.forEach((facet, index) => facetTargets.set(facet, Math.floor(target / facets.length) + (index < target % facets.length ? 1 : 0)));
-    const responseTargets = new Map<ResponseType, number>([
-      ["selfMatch", selfTargets.get(key) ?? 0],
-      ["frequency", frequencyTargets.get(key) ?? 0],
-    ]);
-    responseTargets.set("directional", target - [...responseTargets.values()].reduce((sum, value) => sum + value, 0));
-    const directionTargets = new Map([[true, reverseTargets.get(key) ?? 0], [false, target - (reverseTargets.get(key) ?? 0)]]);
-    const facetCounts = new Map<string, number>();
-    const responseCounts = new Map<ResponseType, number>();
-    const directionCounts = new Map<boolean, number>();
-    const cellChosen: Question[] = [];
-
-    while (cellChosen.length < target) {
-      const available = preferred.filter((q) => !chosenIds.has(q.id) && !mirrorGroups.has(q.mirrorGroup));
-      const facetNeeded = (q: Question) => (facetCounts.get(q.facetId) ?? 0) < (facetTargets.get(q.facetId) ?? 0);
-      const responseNeeded = (q: Question) => (responseCounts.get(q.responseType) ?? 0) < (responseTargets.get(q.responseType) ?? 0);
-      const directionNeeded = (q: Question) => (directionCounts.get(q.reverseScored) ?? 0) < (directionTargets.get(q.reverseScored) ?? 0);
-      const selectors = [
-        (q: Question) => facetNeeded(q) && responseNeeded(q) && directionNeeded(q),
-        (q: Question) => facetNeeded(q) && responseNeeded(q),
-        (q: Question) => responseNeeded(q) && directionNeeded(q),
-        (q: Question) => responseNeeded(q),
-        (q: Question) => facetNeeded(q) && directionNeeded(q),
-        (q: Question) => facetNeeded(q),
-        (q: Question) => directionNeeded(q),
-        () => true,
-      ];
-      const picked = selectors.map((selector) => available.find(selector)).find(Boolean);
-      if (!picked) break;
-      cellChosen.push(picked);
-      chosen.push(picked);
-      chosenIds.add(picked.id);
-      mirrorGroups.add(picked.mirrorGroup);
-      facetCounts.set(picked.facetId, (facetCounts.get(picked.facetId) ?? 0) + 1);
-      responseCounts.set(picked.responseType, (responseCounts.get(picked.responseType) ?? 0) + 1);
-      directionCounts.set(picked.reverseScored, (directionCounts.get(picked.reverseScored) ?? 0) + 1);
-    }
-  }
-
-  // 极端情况下补齐，但仍不重复题目或镜像组。
-  if (chosen.length < count) {
-    for (const q of shuffle(bank, random)) {
-      if (chosen.length >= count) break;
-      if (!chosenIds.has(q.id) && !mirrorGroups.has(q.mirrorGroup)) {
-        chosen.push(q);
-        chosenIds.add(q.id);
-        mirrorGroups.add(q.mirrorGroup);
-      }
-    }
-  }
-
-  return constrainedOrder(chosen.slice(0, count), random);
-}
-
 export function computeSessionResult(
   sessionId: string,
   questions: Question[],
   responseList: ResponseRecord[],
 ): SessionResult {
   const responses = new Map(responseList.map((r) => [r.questionId, r]));
-  const answered = responseList.filter((r) => r.score !== null);
+  const answered = responseList.filter((r) => r.axisScore !== null);
   const elapsed = answered.map((r) => r.elapsedMs).sort((a, b) => a - b);
   const medianResponseMs =
     elapsed.length === 0
@@ -275,19 +111,18 @@ export function computeSessionResult(
   ) as SessionResult["domainAxes"];
 
   const facetScores: Record<string, number> = {};
-  const facets = [...new Set(questions.map((q) => q.facetId))];
-  for (const facet of facets) {
-    const facetQuestions = questions.filter((q) => q.facetId === facet);
-    const values = facetQuestions
+  const traits = [...new Set(questions.map((q) => q.traitId))];
+  for (const trait of traits) {
+    const traitQuestions = questions.filter((q) => q.traitId === trait);
+    const values = traitQuestions
       .map((question) => {
-        const score = responses.get(question.id)?.score;
+        const score = responses.get(question.id)?.traitScore;
         if (score === null || score === undefined) return undefined;
-        const normalized = normalizedScore(score);
-        return question.reverseScored ? normalized * -1 : normalized;
+        return normalizedScore(score);
       })
       .filter((value): value is number => value !== undefined);
     const mean = values.length ? values.reduce<number>((a, b) => a + b, 0) / values.length : 0;
-    facetScores[facet] = round1(((mean + 1) / 2) * 100);
+    facetScores[trait] = round1(((mean + 1) / 2) * 100);
   }
 
   const responseTypeCounts = { selfMatch: 0, frequency: 0, directional: 0 };
@@ -312,7 +147,7 @@ export function computeSessionResult(
     medianResponseMs: Math.round(medianResponseMs),
     tooFastRate: round1(tooFastRate * 100) / 100,
     qualityWeight: round1(qualityWeight * 100) / 100,
-    bankVersion: questions[0]?.version ?? "legacy",
+    bankVersion: questions[0]?.bankVersion ?? "legacy",
     responseTypeCounts,
     optionSelectionCounts,
     dominantOptionRate: round1(dominantOptionRate * 100) / 100,

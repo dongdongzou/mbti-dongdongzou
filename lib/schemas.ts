@@ -4,20 +4,25 @@ export type Pole = "E" | "I" | "S" | "N" | "T" | "F" | "J" | "P";
 export type ResponseType = "selfMatch" | "frequency" | "directional";
 
 export interface QuestionOption {
-  id: string;
+  id: "A" | "B" | "C";
   label: string;
-  score: -2 | 0 | 2;
-  pole?: Pole;
+  axisScore: -2 | 0 | 2;
+  traitScore: -2 | 0 | 2;
+  pole: Pole | null;
 }
 
 export interface Question {
   id: string;
-  version: string;
+  bankVersion: string;
   axis: Axis;
+  leftPole: "E" | "S" | "T" | "J";
+  rightPole: "I" | "N" | "F" | "P";
   domain: Domain;
-  facetId: string;
-  facetName: string;
+  traitId: string;
+  traitName: string;
+  targetPole: Pole;
   responseType: ResponseType;
+  responseGuide: string;
   scenarioTag: string;
   mirrorGroup: string;
   prompt: string;
@@ -25,18 +30,20 @@ export interface Question {
   reverseScored: boolean;
   readingLength: number;
   estimatedReadingMs: number;
+  timeoutMs: 8000;
   weight: number;
   isOriginal: true;
   isActive: boolean;
-  sourceQuestionId?: string;
 }
 
 export interface ResponseRecord {
   questionId: string;
-  selectedOptionId: string | null;
-  score: -2 | -1 | 0 | 1 | 2 | null;
+  selectedOptionId: "A" | "B" | "C" | null;
+  axisScore: -2 | 0 | 2 | null;
+  traitScore: -2 | 0 | 2 | null;
   elapsedMs: number;
   timedOut: boolean;
+  bankVersion: string;
   answeredAt: string;
 }
 

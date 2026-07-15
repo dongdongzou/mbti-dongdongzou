@@ -1,19 +1,26 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import questionBankJson from "@/lib/data/question_bank_640.json";
-import questionIdMapJson from "@/lib/data/question_id_map_v2_to_v3.json";
+import questionBankJson from "@/lib/data/DONGDONGZOU_MBTI_QUESTION_BANK_640_v2.json";
 import profilesJson from "@/lib/data/type_profiles_16.json";
 import config from "@/lib/data/test_config.json";
 import { composeReport, REQUIRED_DISCLAIMER } from "@/lib/reportComposer";
-import { computeSessionResult, selectQuestions } from "@/lib/scoring";
+import { selectDongDongZouQuestions } from "@/lib/dongdongzouQuestionBankSelector";
+import { computeSessionResult } from "@/lib/scoring";
 import type { Axis, Question, ResponseRecord, SessionResult } from "@/lib/schemas";
 
-const STORE_KEY = "innercompass16:v2";
+const STORE_KEY = "dongdongzou-mbti-v2";
+const LEGACY_STORE_KEY = "innercompass16:v2";
 const AXES: Axis[] = ["EI", "SN", "TF", "JP"];
-const bank = questionBankJson.questions as unknown as Question[];
-const questionIdMap = questionIdMapJson.mappings as Record<string, string>;
 const BANK_VERSION = questionBankJson.meta.version;
+const bank = (questionBankJson.questions as unknown as Question[]).filter(
+  (question) => question.isActive && question.bankVersion === BANK_VERSION,
+);
+
+if (BANK_VERSION !== "2.0.0") throw new Error("Wrong DONGDONGZOU question bank version");
+if (questionBankJson.questions.length !== 640 || bank.length !== 640) {
+  throw new Error(`Expected 640 active DONGDONGZOU questions, received ${bank.length}`);
+}
 
 type TypeProfile = {
   title: string;
@@ -39,29 +46,29 @@ type StoredSession = {
   completedAt?: string;
   result?: SessionResult;
   bankVersion?: string;
-  dataVersion: 2 | 3;
+  dataVersion: 2 | 3 | 4;
+  invalidatedReason?: "question-bank-upgraded";
 };
 
-type Store = { version: 2; sessions: StoredSession[] };
+type Store = { version: 3; sessions: StoredSession[] };
 
-const emptyStore = (): Store => ({ version: 2, sessions: [] });
+const emptyStore = (): Store => ({ version: 3, sessions: [] });
 
 function loadStore(): Store {
   if (typeof window === "undefined") return emptyStore();
   try {
-    const parsed = JSON.parse(localStorage.getItem(STORE_KEY) || "null");
+    const currentValue = localStorage.getItem(STORE_KEY);
+    const parsed = JSON.parse(currentValue || localStorage.getItem(LEGACY_STORE_KEY) || "null");
     if (!parsed || !Array.isArray(parsed.sessions)) return emptyStore();
-    const sessions = parsed.sessions.map((session: StoredSession) => {
+    const sessions: StoredSession[] = parsed.sessions.map((session: StoredSession) => {
       if (session.status !== "active" || session.bankVersion === BANK_VERSION) return session;
-      return {
-        ...session,
-        questionIds: session.questionIds.map((id) => questionIdMap[id] ?? id),
-        responses: session.responses.map((response) => ({ ...response, questionId: questionIdMap[response.questionId] ?? response.questionId })),
-        bankVersion: BANK_VERSION,
-        dataVersion: 3 as const,
-      };
+      return { ...session, status: "abandoned" as const, invalidatedReason: "question-bank-upgraded" as const };
     });
-    return { version: 2, sessions };
+    const migrated: Store = { version: 3, sessions };
+    if (!currentValue || parsed.version !== 3 || sessions.some((session, index) => session !== parsed.sessions[index])) {
+      localStorage.setItem(STORE_KEY, JSON.stringify(migrated));
+    }
+    return migrated;
   } catch {
     return emptyStore();
   }
@@ -81,7 +88,9 @@ function upsertSession(session: StoredSession) {
 
 function sessionQuestions(session: StoredSession): Question[] {
   const byId = new Map(bank.map((question) => [question.id, question]));
-  return session.questionIds.map((id) => byId.get(id) ?? byId.get(questionIdMap[id])).filter(Boolean) as Question[];
+  return session.bankVersion === BANK_VERSION
+    ? session.questionIds.map((id) => byId.get(id)).filter(Boolean) as Question[]
+    : [];
 }
 
 function formatDate(value: string) {
@@ -136,6 +145,7 @@ function HomeView({ navigate, revision }: { navigate: (path: string) => void; re
   const store = useMemo(() => { void revision; return loadStore(); }, [revision]);
   const active = store.sessions.find((session) => session.status === "active");
   const completed = store.sessions.filter((session) => session.status === "completed");
+  const bankUpgradeInvalidatedSession = store.sessions.some((session) => session.invalidatedReason === "question-bank-upgraded");
   return (
     <Shell>
       <TopBar onHome={() => navigate("/")} action={<button className="text-button" onClick={() => navigate("/history")}>历史记录</button>} />
@@ -143,6 +153,7 @@ function HomeView({ navigate, revision }: { navigate: (path: string) => void; re
         <div className="hero-kicker"><span /> 原创 · 非官方 · 一次完成</div>
         <h1>更安静地，<br />看见自己的<span>行为偏好</span>。</h1>
         <p className="hero-copy">从生活与关系中的真实行为出发，用简短感受判断，完成一次即可获得完整的偏好画像。</p>
+        {bankUpgradeInvalidatedSession && <div className="upgrade-notice">题库已升级为生活化 v2 版本。为保证结果准确，旧的未完成测试已失效，请重新开始；历史报告仍会保留。</div>}
         <div className="hero-actions">
           <button className="primary-button" onClick={() => navigate("/setup")}>开始第一次测试 <span>→</span></button>
           {active && <button className="secondary-button" onClick={() => navigate(`/test/${active.id}`)}>继续上次测试 · {active.currentIndex + 1}/{active.questionIds.length}</button>}
@@ -166,13 +177,13 @@ function SetupView({ navigate }: { navigate: (path: string) => void }) {
   const [count, setCount] = useState(config.session.defaultQuestionCount);
   const start = () => {
     const store = loadStore();
-    const recent = store.sessions.slice(0, 3).flatMap((session) => session.questionIds.map((id) => questionIdMap[id] ?? id));
+    const recent = store.sessions.filter((session) => session.bankVersion === BANK_VERSION).slice(0, 3).flatMap((session) => session.questionIds);
     const seed = Date.now();
-    const selected = selectQuestions(bank, count, recent, seed);
+    const selected = selectDongDongZouQuestions(bank, count, seed, recent);
     const session: StoredSession = {
       id: `ic-${seed.toString(36)}`, seed, questionIds: selected.map((question) => question.id),
       currentIndex: 0, currentQuestionStartedAt: Date.now(), responses: [], status: "active",
-      createdAt: new Date().toISOString(), bankVersion: BANK_VERSION, dataVersion: 3,
+      createdAt: new Date().toISOString(), bankVersion: BANK_VERSION, dataVersion: 4,
     };
     upsertSession(session);
     navigate(`/test/${session.id}`);
@@ -210,7 +221,7 @@ function TestView({ sessionId, navigate }: { sessionId: string; navigate: (path:
   const questions = useMemo(() => session ? sessionQuestions(session) : [], [session]);
   const question = session ? questions[session.currentIndex] : undefined;
 
-  const submit = useCallback((optionId: string | null) => {
+  const submit = useCallback((optionId: Question["options"][number]["id"] | null) => {
     const current = sessionRef.current;
     if (!current || current.status !== "active" || lockedRef.current) return;
     const allQuestions = sessionQuestions(current);
@@ -221,9 +232,10 @@ function TestView({ sessionId, navigate }: { sessionId: string; navigate: (path:
     setChosen(optionId);
     const option = optionId ? currentQuestion.options.find((item) => item.id === optionId) : undefined;
     const response: ResponseRecord = {
-      questionId: currentQuestion.id, selectedOptionId: optionId, score: option?.score ?? null,
-      elapsedMs: Math.min(Date.now() - current.currentQuestionStartedAt, config.session.questionTimeoutMs),
-      timedOut: optionId === null, answeredAt: new Date().toISOString(),
+      questionId: currentQuestion.id, selectedOptionId: optionId,
+      axisScore: option?.axisScore ?? null, traitScore: option?.traitScore ?? null,
+      elapsedMs: Math.min(Date.now() - current.currentQuestionStartedAt, currentQuestion.timeoutMs),
+      timedOut: optionId === null, bankVersion: BANK_VERSION, answeredAt: new Date().toISOString(),
     };
     const responses = [...current.responses.filter((item) => item.questionId !== response.questionId), response];
     const finished = current.currentIndex >= allQuestions.length - 1;
@@ -248,7 +260,7 @@ function TestView({ sessionId, navigate }: { sessionId: string; navigate: (path:
       const current = sessionRef.current;
       if (document.visibilityState === "visible" && current) {
         const currentQuestion = sessionQuestions(current)[current.currentIndex];
-        if (currentQuestion && Date.now() - current.currentQuestionStartedAt >= config.session.questionTimeoutMs) submit(null);
+        if (currentQuestion && Date.now() - current.currentQuestionStartedAt >= currentQuestion.timeoutMs) submit(null);
       }
     };
     document.addEventListener("visibilitychange", onVisibility);
@@ -257,7 +269,7 @@ function TestView({ sessionId, navigate }: { sessionId: string; navigate: (path:
 
   useEffect(() => {
     if (!question || !session || lockedRef.current) return;
-    const remaining = config.session.questionTimeoutMs - (Date.now() - session.currentQuestionStartedAt);
+    const remaining = question.timeoutMs - (Date.now() - session.currentQuestionStartedAt);
     if (remaining <= 0) { submit(null); return; }
     const timeout = window.setTimeout(() => submit(null), remaining);
     return () => window.clearTimeout(timeout);
@@ -275,21 +287,21 @@ function TestView({ sessionId, navigate }: { sessionId: string; navigate: (path:
   }, [question, submit]);
 
   if (!session || !question) return <MissingView navigate={navigate} />;
-  const remaining = Math.max(0, config.session.questionTimeoutMs - (now - session.currentQuestionStartedAt));
+  const remaining = Math.max(0, question.timeoutMs - (now - session.currentQuestionStartedAt));
   const seconds = Math.max(1, Math.ceil(remaining / 1000));
   const progress = (session.currentIndex / questions.length) * 100;
   return (
     <Shell compact>
       <header className="test-header">
         <div className="test-brand"><Logo /><span>{session.currentIndex + 1} <i>/</i> {questions.length}</span></div>
-        <div className={seconds === 1 ? "timer urgent" : "timer"}><span style={{ "--timer": `${remaining / config.session.questionTimeoutMs * 360}deg` } as React.CSSProperties}>{seconds}</span></div>
+        <div className={seconds === 1 ? "timer urgent" : "timer"}><span style={{ "--timer": `${remaining / question.timeoutMs * 360}deg` } as React.CSSProperties}>{seconds}</span></div>
       </header>
       <div className="top-progress"><span style={{ width: `${progress}%` }} /></div>
       <section className="question-stage" key={question.id}>
         <div className="question-number">第 {session.currentIndex + 1} 题</div>
         <h1>{question.prompt}</h1>
-        <p className="question-guide">{question.responseType === "frequency" ? "这种情况通常会发生吗？" : question.responseType === "directional" ? "你更接近哪一种真实反应？" : "这有多像你平时真实的状态？"}</p>
-        <div className={question.responseType === "directional" ? "option-list directional-scale" : "option-list agreement-scale"} aria-label="符合程度">
+        <p className="question-guide">{question.responseGuide}</p>
+        <div className={question.responseType === "directional" ? "option-list directional-scale" : "option-list agreement-scale"} aria-label={question.responseGuide}>
           {question.options.map((option, index) => (
             <button disabled={locked} className={chosen === option.id ? "chosen" : ""} key={option.id} onClick={() => submit(option.id)}>
               <span>{String.fromCharCode(65 + index)}</span><b>{option.label}</b>
@@ -394,9 +406,10 @@ function HistoryView({ navigate, refresh }: { navigate: (path: string) => void; 
       <section className="history-list">
         {!store.sessions.length && <div className="empty-card"><Logo /><h2>还没有记录</h2><p>完成一次问卷后，你会在这里看到完整结果。</p><button className="primary-button" onClick={() => navigate("/setup")}>开始测试 <span>→</span></button></div>}
         {store.sessions.map((session, index) => {
-          const type = session.result ? AXES.map((axis) => session.result!.axes[axis].rightPercent > 50 ? session.result!.axes[axis].rightPole : session.result!.axes[axis].leftPole).join("") : "进行中";
+          const type = session.result ? AXES.map((axis) => session.result!.axes[axis].rightPercent > 50 ? session.result!.axes[axis].rightPole : session.result!.axes[axis].leftPole).join("") : session.status === "abandoned" ? "已失效" : "进行中";
           const version = session.bankVersion ?? session.result?.bankVersion ?? "旧版";
-          return <article key={session.id}><div className="history-index">{String(index + 1).padStart(2, "0")}</div><div><span>{formatDate(session.createdAt)} · {session.questionIds.length} 题 · 题库 {version}</span><h2>{type} {session.result && <small>{profiles[type]?.title}</small>}</h2><p>{session.status === "active" ? `已完成 ${session.currentIndex} / ${session.questionIds.length}` : `完成率 ${Math.round((session.result?.completionRate || 0) * 100)}% · 中位反应 ${((session.result?.medianResponseMs || 0) / 1000).toFixed(1)} 秒`}</p></div><div className="history-actions"><button onClick={() => navigate(session.status === "active" ? `/test/${session.id}` : `/run-result/${session.id}`)}>{session.status === "active" ? "继续" : "查看"}</button><button className="danger" onClick={() => remove(session.id)}>删除</button></div></article>;
+          const summary = session.status === "active" ? `已完成 ${session.currentIndex} / ${session.questionIds.length}` : session.status === "abandoned" ? "题库升级后不可继续，历史答案未混入新版" : `完成率 ${Math.round((session.result?.completionRate || 0) * 100)}% · 中位反应 ${((session.result?.medianResponseMs || 0) / 1000).toFixed(1)} 秒`;
+          return <article key={session.id}><div className="history-index">{String(index + 1).padStart(2, "0")}</div><div><span>{formatDate(session.createdAt)} · {session.questionIds.length} 题 · 题库 {version}</span><h2>{type} {session.result && <small>{profiles[type]?.title}</small>}</h2><p>{summary}</p></div><div className="history-actions"><button onClick={() => navigate(session.status === "active" ? `/test/${session.id}` : session.status === "abandoned" ? "/setup" : `/run-result/${session.id}`)}>{session.status === "active" ? "继续" : session.status === "abandoned" ? "重新开始" : "查看"}</button><button className="danger" onClick={() => remove(session.id)}>删除</button></div></article>;
         })}
       </section>
     </Shell>

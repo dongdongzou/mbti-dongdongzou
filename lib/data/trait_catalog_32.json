@@ -2,7 +2,7 @@
   "version": "3.0.0",
   "traits": [
     {
-      "id": "life_social_initiative",
+      "id": "L_E_SOCIAL",
       "name": "社交主动度",
       "axis": "EI",
       "domain": "life",
@@ -16,7 +16,7 @@
       "action": "重要场合先准备一句自然的开场白"
     },
     {
-      "id": "life_solitude_recovery",
+      "id": "L_I_RECOVER",
       "name": "独处恢复力",
       "axis": "EI",
       "domain": "life",
@@ -30,7 +30,7 @@
       "action": "提前为高强度社交后的独处留出时间"
     },
     {
-      "id": "life_instant_expression",
+      "id": "L_E_EXPRESS",
       "name": "即时表达度",
       "axis": "EI",
       "domain": "life",
@@ -44,7 +44,7 @@
       "action": "表达前先用一句话标记这只是初步想法"
     },
     {
-      "id": "life_independent_thinking",
+      "id": "L_I_THINK",
       "name": "独立思考度",
       "axis": "EI",
       "domain": "life",
@@ -58,7 +58,7 @@
       "action": "还没想完时先同步进度，减少他人等待的不确定"
     },
     {
-      "id": "life_detail_attention",
+      "id": "L_S_DETAIL",
       "name": "细节关注度",
       "axis": "SN",
       "domain": "life",
@@ -72,7 +72,7 @@
       "action": "重要决定前列出三个必须核对的事实"
     },
     {
-      "id": "life_pattern_insight",
+      "id": "L_N_PATTERN",
       "name": "模式洞察力",
       "axis": "SN",
       "domain": "life",
@@ -86,7 +86,7 @@
       "action": "形成推测后补问一个可以验证它的事实"
     },
     {
-      "id": "life_practical_grounding",
+      "id": "L_S_PRACTICAL",
       "name": "现实落地度",
       "axis": "SN",
       "domain": "life",
@@ -100,7 +100,7 @@
       "action": "把一个想法转成今天可以完成的最小动作"
     },
     {
-      "id": "life_possibility_exploration",
+      "id": "L_N_POSSIBILITY",
       "name": "可能性探索度",
       "axis": "SN",
       "domain": "life",
@@ -114,7 +114,7 @@
       "action": "探索新方向时同时保留一个可落地的备选"
     },
     {
-      "id": "life_logic_analysis",
+      "id": "L_T_LOGIC",
       "name": "逻辑分析度",
       "axis": "TF",
       "domain": "life",
@@ -128,7 +128,7 @@
       "action": "给出结论时补充一句它可能带来的感受"
     },
     {
-      "id": "life_emotion_awareness",
+      "id": "L_F_EMOTION",
       "name": "情绪感知度",
       "axis": "TF",
       "domain": "life",
@@ -142,7 +142,7 @@
       "action": "感受到情绪后再确认一次，不替对方下结论"
     },
     {
-      "id": "life_principle_judgment",
+      "id": "L_T_PRINCIPLE",
       "name": "原则判断度",
       "axis": "TF",
       "domain": "life",
@@ -156,7 +156,7 @@
       "action": "坚持原则时说明适用边界和例外条件"
     },
     {
-      "id": "life_relationship_consideration",
+      "id": "L_F_RELATION",
       "name": "关系顾及度",
       "axis": "TF",
       "domain": "life",
@@ -170,7 +170,7 @@
       "action": "照顾关系时也明确说出自己的底线"
     },
     {
-      "id": "life_planning_organization",
+      "id": "L_J_PLAN",
       "name": "计划组织度",
       "axis": "JP",
       "domain": "life",
@@ -184,7 +184,7 @@
       "action": "只规划关键节点，为变化保留缓冲"
     },
     {
-      "id": "life_free_exploration",
+      "id": "L_P_EXPLORE",
       "name": "自由探索度",
       "axis": "JP",
       "domain": "life",
@@ -198,7 +198,7 @@
       "action": "为开放任务设置一个最低限度的检查时间"
     },
     {
-      "id": "life_result_closure",
+      "id": "L_J_CLOSURE",
       "name": "结果闭环度",
       "axis": "JP",
       "domain": "life",
@@ -212,7 +212,7 @@
       "action": "收尾前问一次是否还有关键事实没有看到"
     },
     {
-      "id": "life_adaptive_flexibility",
+      "id": "L_P_ADAPT",
       "name": "灵活应变度",
       "axis": "JP",
       "domain": "life",
@@ -226,7 +226,7 @@
       "action": "临时调整时同步新的边界、负责人和截止点"
     },
     {
-      "id": "relationship_active_approach",
+      "id": "R_E_APPROACH",
       "name": "主动靠近",
       "axis": "EI",
       "domain": "relationship",
@@ -240,7 +240,7 @@
       "action": "想靠近时提出具体而不施压的邀请"
     },
     {
-      "id": "relationship_personal_space",
+      "id": "R_I_SPACE",
       "name": "个人空间",
       "axis": "EI",
       "domain": "relationship",
@@ -254,8 +254,8 @@
       "action": "需要空间时同时说明大致时长和回应方式"
     },
     {
-      "id": "relationship_emotional_expression",
-      "name": "情绪表达",
+      "id": "R_E_RESPONSE",
+      "name": "回应敏感度",
       "axis": "EI",
       "domain": "relationship",
       "pole": "E",
@@ -263,12 +263,12 @@
         "expression_processing",
         "initiative_visibility"
       ],
-      "behavior": "愿意把当下感受及时说出来",
-      "alternative": "先在内部消化，确认意思后再表达",
-      "action": "强烈情绪出现时先说感受，再讨论结论"
+      "behavior": "会留意对方回应速度、投入程度和互动变化",
+      "alternative": "不因短期回应变化调整自己的靠近方式",
+      "action": "察觉回应变化时先核对事实，再决定是否调整节奏"
     },
     {
-      "id": "relationship_internal_processing",
+      "id": "R_I_PROCESS",
       "name": "内部消化",
       "axis": "EI",
       "domain": "relationship",
@@ -282,7 +282,7 @@
       "action": "沉默整理时先告诉对方你会回来继续谈"
     },
     {
-      "id": "relationship_factual_communication",
+      "id": "R_S_FACT",
       "name": "事实沟通",
       "axis": "SN",
       "domain": "relationship",
@@ -296,7 +296,7 @@
       "action": "产生猜测时先核对一件具体发生的事"
     },
     {
-      "id": "relationship_implicit_signal",
+      "id": "R_N_SIGNAL",
       "name": "隐含信息感知",
       "axis": "SN",
       "domain": "relationship",
@@ -310,7 +310,7 @@
       "action": "察觉信号后用开放问题确认，而不是独自推演"
     },
     {
-      "id": "relationship_action_trust",
+      "id": "R_S_ACTION",
       "name": "行动信任",
       "axis": "SN",
       "domain": "relationship",
@@ -324,7 +324,7 @@
       "action": "重要承诺尽量转成可观察的具体行动"
     },
     {
-      "id": "relationship_deep_understanding",
+      "id": "R_N_DEPTH",
       "name": "深层理解",
       "axis": "SN",
       "domain": "relationship",
@@ -338,7 +338,7 @@
       "action": "深挖原因前先确认对方是否愿意谈得更深"
     },
     {
-      "id": "relationship_problem_solving",
+      "id": "R_T_SOLVE",
       "name": "问题解决",
       "axis": "TF",
       "domain": "relationship",
@@ -352,7 +352,7 @@
       "action": "给建议前先问对方需要陪伴还是办法"
     },
     {
-      "id": "relationship_emotional_holding",
+      "id": "R_F_HOLD",
       "name": "情绪承接",
       "axis": "TF",
       "domain": "relationship",
@@ -366,7 +366,7 @@
       "action": "承接情绪后再一起确认下一步需要什么"
     },
     {
-      "id": "relationship_boundary_clarity",
+      "id": "R_T_BOUNDARY",
       "name": "边界清晰",
       "axis": "TF",
       "domain": "relationship",
@@ -380,7 +380,7 @@
       "action": "表达边界时同时说明你重视这段关系"
     },
     {
-      "id": "relationship_harmony_maintenance",
+      "id": "R_F_HARMONY",
       "name": "和谐维护",
       "axis": "TF",
       "domain": "relationship",
@@ -394,7 +394,7 @@
       "action": "维护和谐时不要省略真正需要讨论的问题"
     },
     {
-      "id": "relationship_commitment_need",
+      "id": "R_J_COMMIT",
       "name": "承诺需求",
       "axis": "JP",
       "domain": "relationship",
@@ -408,7 +408,7 @@
       "action": "需要确定时提出具体问题，避免用试探代替沟通"
     },
     {
-      "id": "relationship_flexibility",
+      "id": "R_P_FLEX",
       "name": "关系弹性",
       "axis": "JP",
       "domain": "relationship",
@@ -422,8 +422,8 @@
       "action": "接受变化时也保留最基本的回应约定"
     },
     {
-      "id": "relationship_conflict_repair",
-      "name": "冲突修复",
+      "id": "R_J_REPAIR",
+      "name": "冲突闭环",
       "axis": "JP",
       "domain": "relationship",
       "pole": "J",
@@ -436,8 +436,8 @@
       "action": "修复冲突时先约定何时谈，不强求立刻解决"
     },
     {
-      "id": "relationship_response_sensitivity",
-      "name": "回应敏感度",
+      "id": "R_P_NATURAL",
+      "name": "自然发展",
       "axis": "JP",
       "domain": "relationship",
       "pole": "P",
@@ -445,9 +445,9 @@
         "closure_decision",
         "adaptability_change"
       ],
-      "behavior": "会根据对方当下反应及时调整互动节奏",
-      "alternative": "更依赖明确约定，不轻易因短期反应改变方向",
-      "action": "调整节奏前区分一次波动和持续变化"
+      "behavior": "允许关系在相处中自然发展，不急于过早定义",
+      "alternative": "通过明确关系方向和阶段安排获得确定感",
+      "action": "保留自然节奏时，也说清楚当前真实意愿"
     }
   ]
 }

@@ -1,111 +1,115 @@
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { selectQuestions } from "../lib/scoring.ts";
+import { selectDongDongZouQuestions, validateDongDongZouBank } from "../lib/dongdongzouQuestionBankSelector.ts";
 
-const bank = JSON.parse(await readFile("lib/data/question_bank_640.json", "utf8"));
+const BANK_PATH = "lib/data/DONGDONGZOU_MBTI_QUESTION_BANK_640_v2.json";
+const EXPECTED_SHA256 = "2b17486a06d7639a877dcf16c23dee46b9a94efe000ddc7a373deb220045ace3";
+const raw = await readFile(BANK_PATH);
+const bank = JSON.parse(raw.toString("utf8"));
 const questions = bank.questions;
 const axes = ["EI", "SN", "TF", "JP"];
 const domains = ["life", "relationship"];
-const responseTypes = ["selfMatch", "frequency", "directional"];
-const bannedTerms = ["价值一致性", "信息加工模式", "认知偏好", "长期图景", "关系影响权重", "内部判断系统", "外部刺激反馈", "结构化闭环倾向"];
 const errors = [];
 
 function countBy(items, key) {
   return Object.fromEntries([...new Set(items.map((item) => item[key]))].sort().map((value) => [value, items.filter((item) => item[key] === value).length]));
 }
 
-function bigrams(text) {
-  const normalized = text.replace(/[，。：“”？、；「」\s]/g, "").replace(/当|在|时|我会|我通常|更接近哪一种反应/g, "");
-  const result = new Set();
-  for (let index = 0; index < normalized.length - 1; index += 1) result.add(normalized.slice(index, index + 2));
-  return result;
+function maxRun(items, key) {
+  let maximum = 0;
+  let current = 0;
+  let previous;
+  for (const item of items) {
+    current = item[key] === previous ? current + 1 : 1;
+    previous = item[key];
+    maximum = Math.max(maximum, current);
+  }
+  return maximum;
 }
 
-function similarity(a, b) {
-  const left = bigrams(a);
-  const right = bigrams(b);
-  const intersection = [...left].filter((item) => right.has(item)).length;
-  const union = new Set([...left, ...right]).size;
-  return union ? intersection / union : 0;
-}
-
+const sha256 = createHash("sha256").update(raw).digest("hex");
+if (sha256 !== EXPECTED_SHA256) errors.push(`SHA-256 不一致：${sha256}`);
+if (bank.meta.version !== "2.0.0") errors.push(`题库版本应为 2.0.0，实际 ${bank.meta.version}`);
 if (questions.length !== 640) errors.push(`总题数应为 640，实际 ${questions.length}`);
+if (questions[0]?.id !== "DDZ-Q0001" || questions.at(-1)?.id !== "DDZ-Q0640") errors.push("首尾题目 ID 不正确");
+
+try {
+  validateDongDongZouBank(questions);
+} catch (error) {
+  errors.push(error instanceof Error ? error.message : String(error));
+}
+
 const ids = new Set();
+const prompts = new Set();
 for (const question of questions) {
   if (ids.has(question.id)) errors.push(`重复题目 ID：${question.id}`);
+  if (prompts.has(question.prompt)) errors.push(`重复题干：${question.id}`);
   ids.add(question.id);
-  for (const field of ["version", "axis", "domain", "facetId", "facetName", "responseType", "mirrorGroup", "scenarioTag", "readingLength", "estimatedReadingMs", "weight"]) {
+  prompts.add(question.prompt);
+  for (const field of ["bankVersion", "axis", "domain", "traitId", "traitName", "targetPole", "responseType", "responseGuide", "mirrorGroup", "scenarioTag", "readingLength", "estimatedReadingMs", "timeoutMs", "weight"]) {
     if (question[field] === undefined || question[field] === "") errors.push(`${question.id} 缺少 ${field}`);
   }
-  if (question.prompt.length < 16) errors.push(`${question.id} 少于 16 字`);
-  if (question.prompt.length > 48) errors.push(`${question.id} 超过 48 字（${question.prompt.length}）`);
-  if (question.readingLength !== question.prompt.length) errors.push(`${question.id} readingLength 不一致`);
-  const banned = bannedTerms.find((term) => question.prompt.includes(term));
-  if (banned) errors.push(`${question.id} 含禁用词：${banned}`);
-  if (/不.{0,5}(不|没|无)/.test(question.prompt)) errors.push(`${question.id} 疑似双重否定`);
-  if (!/^(当|在)/.test(question.prompt)) errors.push(`${question.id} 缺少具体场景句式`);
-  if (!responseTypes.includes(question.responseType)) errors.push(`${question.id} responseType 无效`);
-  const scores = question.options.map((option) => option.score).sort((a, b) => a - b).join(",");
-  if (question.options.length !== 3 || scores !== "-2,0,2") errors.push(`${question.id} 选项分数不完整：${scores}`);
-  if (question.options.some((option) => !option.id || !option.label)) errors.push(`${question.id} 选项缺少 id 或 label`);
+  if (question.bankVersion !== "2.0.0") errors.push(`${question.id} 版本错误`);
+  if (!question.isActive || !question.isOriginal) errors.push(`${question.id} 必须是启用的原创题`);
+  if (question.timeoutMs !== 8000) errors.push(`${question.id} 超时应为 8000ms`);
+  if (question.prompt.length > 48 || question.readingLength !== question.prompt.length) errors.push(`${question.id} 题干长度错误`);
+  if (question.options.length !== 3) errors.push(`${question.id} 必须有三个选项`);
+  const axisScores = question.options.map((option) => option.axisScore).sort((a, b) => a - b).join(",");
+  const traitScores = question.options.map((option) => option.traitScore).sort((a, b) => a - b).join(",");
+  if (axisScores !== "-2,0,2" || traitScores !== "-2,0,2") errors.push(`${question.id} 显式分数不完整`);
+  if (question.options.some((option) => !option.id || !option.label || option.axisScore === undefined || option.traitScore === undefined)) errors.push(`${question.id} 选项字段缺失`);
 }
 
 const axisCounts = countBy(questions, "axis");
 const domainCounts = countBy(questions, "domain");
-const facetCounts = countBy(questions, "facetId");
+const traitCounts = countBy(questions, "traitId");
 const typeCounts = countBy(questions, "responseType");
+const mirrorCounts = countBy(questions, "mirrorGroup");
 for (const axis of axes) if (axisCounts[axis] !== 160) errors.push(`${axis} 应为 160，实际 ${axisCounts[axis]}`);
 for (const domain of domains) if (domainCounts[domain] !== 320) errors.push(`${domain} 应为 320，实际 ${domainCounts[domain]}`);
-for (const [facet, count] of Object.entries(facetCounts)) if (count !== 20) errors.push(`${facet} 应为 20，实际 ${count}`);
-if (Object.keys(facetCounts).length !== 32) errors.push(`行为特质应为 32，实际 ${Object.keys(facetCounts).length}`);
-if (typeCounts.selfMatch !== 448 || typeCounts.frequency !== 128 || typeCounts.directional !== 64) errors.push(`答案模板比例错误：${JSON.stringify(typeCounts)}`);
-
-const duplicates = [];
-for (let leftIndex = 0; leftIndex < questions.length; leftIndex += 1) {
-  for (let rightIndex = leftIndex + 1; rightIndex < questions.length; rightIndex += 1) {
-    const left = questions[leftIndex];
-    const right = questions[rightIndex];
-    if (left.mirrorGroup === right.mirrorGroup || left.axis !== right.axis || left.domain !== right.domain) continue;
-    const score = similarity(left.prompt, right.prompt);
-    if (score >= 0.9) duplicates.push({ left: left.id, right: right.id, score: Number(score.toFixed(2)) });
-  }
+for (const axis of axes) for (const domain of domains) {
+  const count = questions.filter((question) => question.axis === axis && question.domain === domain).length;
+  if (count !== 80) errors.push(`${axis}-${domain} 应为 80，实际 ${count}`);
 }
-if (duplicates.length) errors.push(`发现 ${duplicates.length} 组非镜像高相似题`);
+if (Object.keys(traitCounts).length !== 32 || Object.values(traitCounts).some((count) => count !== 20)) errors.push("32 项行为特质必须各 20 题");
+if (typeCounts.selfMatch !== 448 || typeCounts.frequency !== 128 || typeCounts.directional !== 64) errors.push(`答案模板比例错误：${JSON.stringify(typeCounts)}`);
+if (Object.keys(mirrorCounts).length !== 160 || Object.values(mirrorCounts).some((count) => count !== 4)) errors.push("镜像组必须为 160 组且每组 4 题");
 
-function simulate(count, seed) {
-  const selected = selectQuestions(questions, count, [], seed);
-  return {
-    count: selected.length,
-    axes: countBy(selected, "axis"),
-    domains: countBy(selected, "domain"),
-    traits: Object.keys(countBy(selected, "facetId")).length,
-    responseTypes: countBy(selected, "responseType"),
-    reversePercent: Number((selected.filter((question) => question.reverseScored).length / selected.length * 100).toFixed(1)),
-  };
+const simulations = [];
+for (const count of [80, 100, 120]) {
+  for (const seed of [1, 2, 37, 20260715]) {
+    const selected = selectDongDongZouQuestions(questions, count, seed, []);
+    const selectedAxes = countBy(selected, "axis");
+    const selectedDomains = countBy(selected, "domain");
+    if (selected.length !== count) errors.push(`${count} 题 seed ${seed} 数量错误`);
+    if (axes.some((axis) => selectedAxes[axis] !== count / 4)) errors.push(`${count} 题 seed ${seed} 四轴不平衡`);
+    if (selectedDomains.life !== count / 2 || selectedDomains.relationship !== count / 2) errors.push(`${count} 题 seed ${seed} 场景不平衡`);
+    if (new Set(selected.map((question) => question.mirrorGroup)).size !== count) errors.push(`${count} 题 seed ${seed} 镜像组重复`);
+    if (Object.keys(countBy(selected, "traitId")).length !== 32) errors.push(`${count} 题 seed ${seed} 未覆盖 32 项特质`);
+    if (maxRun(selected, "axis") > 2 || maxRun(selected, "domain") > 2) errors.push(`${count} 题 seed ${seed} 出现连续三题同维度或场景`);
+    if (seed === 20260715) simulations.push({ count, axes: selectedAxes, domains: selectedDomains, traits: Object.keys(countBy(selected, "traitId")).length, mirrorGroups: new Set(selected.map((question) => question.mirrorGroup)).size });
+  }
 }
 
 const lengths = questions.map((question) => question.prompt.length);
-const simulations = [80, 100, 120].map((count) => simulate(count, 20260714));
-const reversePercent = Number((questions.filter((question) => question.reverseScored).length / questions.length * 100).toFixed(1));
-
-console.log("\nInnerCompass 题库校验");
+console.log("\nDONGDONGZOU v2 题库校验");
+console.log(`- 运行文件：${BANK_PATH}`);
 console.log(`- 版本：${bank.meta.version}`);
+console.log(`- SHA-256：${sha256}`);
+console.log(`- 首题 / 末题：${questions[0].id} / ${questions.at(-1).id}`);
 console.log(`- 总题数：${questions.length}`);
 console.log(`- 维度：${JSON.stringify(axisCounts)}`);
 console.log(`- 场景：${JSON.stringify(domainCounts)}`);
-console.log(`- 行为特质：${Object.keys(facetCounts).length} 项，每项 ${Math.min(...Object.values(facetCounts))}–${Math.max(...Object.values(facetCounts))} 题`);
+console.log(`- 行为特质：${Object.keys(traitCounts).length} 项，每项 ${Math.min(...Object.values(traitCounts))}–${Math.max(...Object.values(traitCounts))} 题`);
 console.log(`- 答案模板：${JSON.stringify(typeCounts)}`);
-console.log(`- 平均字数：${(lengths.reduce((sum, value) => sum + value, 0) / lengths.length).toFixed(1)}`);
-console.log(`- 最短 / 最长：${Math.min(...lengths)} / ${Math.max(...lengths)}`);
-console.log(`- 反向题占比：${reversePercent}%`);
-console.log(`- 超长题：${questions.filter((question) => question.prompt.length > 48).length}`);
-console.log(`- 高相似题：${duplicates.length}`);
-for (const result of simulations) console.log(`- ${result.count} 题模拟：${JSON.stringify(result)}`);
+console.log(`- 题干平均 / 最长：${(lengths.reduce((sum, value) => sum + value, 0) / lengths.length).toFixed(2)} / ${Math.max(...lengths)}`);
+for (const simulation of simulations) console.log(`- ${simulation.count} 题模拟：${JSON.stringify(simulation)}`);
 
 if (errors.length) {
   console.error("\n校验失败：");
-  errors.slice(0, 40).forEach((error) => console.error(`- ${error}`));
-  if (errors.length > 40) console.error(`- 其余 ${errors.length - 40} 项已省略`);
+  errors.slice(0, 50).forEach((error) => console.error(`- ${error}`));
+  if (errors.length > 50) console.error(`- 其余 ${errors.length - 50} 项已省略`);
   process.exitCode = 1;
 } else {
-  console.log("\n校验通过。\n");
+  console.log("\n校验通过。旧题库未参与运行。\n");
 }

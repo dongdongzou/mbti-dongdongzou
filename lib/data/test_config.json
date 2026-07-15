@@ -1,6 +1,11 @@
 {
   "appName": "InnerCompass 16",
   "positioning": "基于 MBTI 四偏好框架的非官方生活与关系自我探索工具",
+  "questionBank": {
+    "project": "DONGDONGZOU",
+    "version": "2.0.0",
+    "itemCount": 640
+  },
   "session": {
     "defaultQuestionCount": 100,
     "minQuestionCount": 80,
@@ -19,7 +24,7 @@
     "balanceDomains": true,
     "avoidSameMirrorGroupInSession": true,
     "avoidQuestionIdsFromRecentRuns": 3,
-    "maxItemsPerFacetPerSession": 4,
+    "maxItemsPerTraitPerSession": 4,
     "defaultPerAxisAt100": 25,
     "defaultPerAxisDomainAt100": 12.5
   },

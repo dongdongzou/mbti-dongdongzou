@@ -13,7 +13,6 @@
     "test": "node --test tests/question-bank.test.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "validate:question-bank": "node scripts/validate-question-bank.mjs",
-    "build:question-bank": "node scripts/build-question-bank.mjs",
     "lint": "eslint app lib pages scripts tests vite.pages.config.ts",
     "db:generate": "drizzle-kit generate"
   },
