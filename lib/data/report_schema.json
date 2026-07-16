@@ -22,7 +22,12 @@
         "boundaryLabel",
         "stabilityLabel"
       ],
-      "visual": "4组双向百分比条形图"
+      "visual": "4组双向百分比条形图",
+      "examples": [
+        "生活场景",
+        "感情场景",
+        "社交场景"
+      ]
     },
     {
       "id": "behavior_logic",

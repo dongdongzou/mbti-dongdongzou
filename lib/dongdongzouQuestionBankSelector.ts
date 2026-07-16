@@ -132,7 +132,7 @@ function reorderWithRunLimits(
 }
 
 /**
- * 从DONGDONGZOU v2题库抽取80/100/120题。
+ * 从 DONGDONGZOU v2.1 场景对比题库抽取 80/100/120 题。
  * - 四维度严格平衡；
  * - 生活/感情严格或总体平衡；
  * - 32项特质尽量均衡；
@@ -163,7 +163,7 @@ export function selectDongDongZouQuestions(
       const stratum = bank.filter(
         (q) =>
           q.isActive &&
-          q.bankVersion === "2.0.0" &&
+          q.bankVersion === "2.1.0" &&
           q.axis === axis &&
           q.domain === domain,
       );
@@ -231,7 +231,7 @@ export function validateDongDongZouBank(bank: Question[]): void {
     if (ids.has(q.id)) errors.push(`Duplicate id: ${q.id}`);
     ids.add(q.id);
 
-    if (q.bankVersion !== "2.0.0") {
+    if (q.bankVersion !== "2.1.0") {
       errors.push(`${q.id}: wrong bankVersion ${q.bankVersion}`);
     }
     if (q.timeoutMs !== 12000) {

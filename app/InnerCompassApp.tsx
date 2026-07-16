@@ -7,17 +7,27 @@ import config from "@/lib/data/test_config.json";
 import { composeReport, REQUIRED_DISCLAIMER } from "@/lib/reportComposer";
 import { selectDongDongZouQuestions } from "@/lib/dongdongzouQuestionBankSelector";
 import { computeSessionResult } from "@/lib/scoring";
-import type { Axis, Question, ResponseRecord, SessionResult } from "@/lib/schemas";
+import type { Axis, Pole, Question, ResponseRecord, SessionResult } from "@/lib/schemas";
 
 const STORE_KEY = "dongdongzou-mbti-v2";
 const LEGACY_STORE_KEY = "innercompass16:v2";
 const AXES: Axis[] = ["EI", "SN", "TF", "JP"];
+const SCENE_EXAMPLES: Record<Pole, { life: string; relationship: string; social: string }> = {
+  E: { life: "空闲时，你更容易通过聊天、活动或外界反馈找回状态。", relationship: "喜欢一个人时，你更可能主动联系和分享近况。", social: "进入陌生聚会时，你更可能先开口认识人。" },
+  I: { life: "忙了一天后，你更需要独处和安静来恢复。", relationship: "难受时，你更常先想清楚，再和对方谈。", social: "到陌生场合时，你通常先观察，再慢慢参与。" },
+  S: { life: "做决定时，你更看具体信息、步骤和现实条件。", relationship: "你更相信对方持续的行动和已经发生的事实。", social: "听人讲故事时，你更容易记住具体经过和细节。" },
+  N: { life: "你容易从零散信息里看到联系和下一步可能。", relationship: "你会留意语气、变化和行为背后的含义。", social: "聊天时，你更容易从一件事联想到更大的主题。" },
+  T: { life: "遇到问题时，你先分析原因、规则和有效办法。", relationship: "对方烦恼时，你表达关心的方式常是一起解决问题。", social: "意见不同时，你更重视观点是否一致、有逻辑。" },
+  F: { life: "做决定时，你会把他人的感受和关系影响一起算进去。", relationship: "对方难过时，你通常先让对方感到被理解。", social: "意见不同时，你会先调整表达，避免让人被否定。" },
+  J: { life: "旅行或任务开始前，明确计划会让你更踏实。", relationship: "你更希望关系方向、承诺和下一步说清楚。", social: "组织活动时，你倾向先确认时间、分工和安排。" },
+  P: { life: "计划变化时，你更容易边走边调整。", relationship: "你更愿意让关系自然发展，保留调整空间。", social: "临时邀约或新想法出现时，你更愿意顺势尝试。" },
+};
 const BANK_VERSION = questionBankJson.meta.version;
 const bank = (questionBankJson.questions as unknown as Question[]).filter(
   (question) => question.isActive && question.bankVersion === BANK_VERSION,
 );
 
-if (BANK_VERSION !== "2.0.0") throw new Error("Wrong DONGDONGZOU question bank version");
+if (BANK_VERSION !== "2.1.0") throw new Error("Wrong DONGDONGZOU question bank version");
 if (questionBankJson.questions.length !== 640 || bank.length !== 640) {
   throw new Error(`Expected 640 active DONGDONGZOU questions, received ${bank.length}`);
 }
@@ -152,8 +162,8 @@ function HomeView({ navigate, revision }: { navigate: (path: string) => void; re
       <section className="hero">
         <div className="hero-kicker"><span /> 原创 · 非官方 · 一次完成</div>
         <h1>更安静地，<br />看见自己的<span>行为偏好</span>。</h1>
-        <p className="hero-copy">从生活与关系中的真实行为出发，用简短感受判断，完成一次即可获得完整的偏好画像。</p>
-        {bankUpgradeInvalidatedSession && <div className="upgrade-notice">题库已升级为生活化 v2 版本。为保证结果准确，旧的未完成测试已失效，请重新开始；历史报告仍会保留。</div>}
+        <p className="hero-copy">从生活与关系中的真实场景出发，在两种具体反应中选择更像你的一边，完成一次即可获得完整画像。</p>
+        {bankUpgradeInvalidatedSession && <div className="upgrade-notice">题目已升级为更易读的场景对比版。为保证结果准确，旧的未完成测试已失效，请重新开始；历史报告仍会保留。</div>}
         <div className="hero-actions">
           <button className="primary-button" onClick={() => navigate("/setup")}>开始第一次测试 <span>→</span></button>
           {active && <button className="secondary-button" onClick={() => navigate(`/test/${active.id}`)}>继续上次测试 · {active.currentIndex + 1}/{active.questionIds.length}</button>}
@@ -194,7 +204,7 @@ function SetupView({ navigate }: { navigate: (path: string) => void }) {
       <section className="setup-card">
         <div className="step-label">开始前 · 选择本次题量</div>
         <h1>给自己一段<br />不被打扰的时间。</h1>
-        <p>每题最多 12 秒，没有标准答案。请选择此刻更自然的反应。</p>
+        <p>每题最多 12 秒。先看场景，再从两种具体反应中选择更像你的一边；只有两边同样常见时才选中间。</p>
         <div className="count-selector" role="radiogroup" aria-label="题目数量">
           {[80, 100, 120].map((value) => <button key={value} role="radio" aria-checked={count === value} className={count === value ? "selected" : ""} onClick={() => setCount(value)}><b>{value}</b><span>题</span>{value === 100 && <em>推荐</em>}</button>)}
         </div>
@@ -298,17 +308,18 @@ function TestView({ sessionId, navigate }: { sessionId: string; navigate: (path:
       </header>
       <div className="top-progress"><span style={{ width: `${progress}%` }} /></div>
       <section className="question-stage" key={question.id}>
-        <div className="question-number">第 {session.currentIndex + 1} 题</div>
-        <h1>{question.prompt}</h1>
-        <p className="question-guide">{question.responseGuide}</p>
+        <div className="question-number">第 {session.currentIndex + 1} 题 · {question.domain === "life" ? "生活场景" : "感情场景"}</div>
+        <div className="scenario-label">想象这个场景</div>
+        <h1>{question.scenarioTag}</h1>
+        <p className="question-guide">你的真实反应更接近哪一种？</p>
         <div className={question.responseType === "directional" ? "option-list directional-scale" : "option-list agreement-scale"} aria-label={question.responseGuide}>
           {question.options.map((option, index) => (
-            <button disabled={locked} className={chosen === option.id ? "chosen" : ""} key={option.id} onClick={() => submit(option.id)}>
-              <span>{String.fromCharCode(65 + index)}</span><b>{option.label}</b>
+            <button disabled={locked} className={`${chosen === option.id ? "chosen " : ""}${index === 1 ? "middle-option" : "side-option"}`} key={option.id} onClick={() => submit(option.id)}>
+              <span>{String.fromCharCode(65 + index)}</span><b>{option.label}</b><i>{index === 1 ? "=" : "›"}</i>
             </button>
           ))}
         </div>
-        <p className="test-hint">没有正确答案，请选择更接近平时状态的一项</p>
+        <p className="test-hint">只有两种反应同样常见时，再选中间 · 没有“更好”的答案</p>
       </section>
     </Shell>
   );
@@ -360,15 +371,16 @@ function RunResultView({ sessionId, navigate }: { sessionId: string; navigate: (
         <p>你的行为偏好更接近</p><h1>{typeCode}</h1><h2>{profile?.title}</h2>
         <p className="result-overview">{report.overview}</p>
       </section>
-      <section className="report-card"><div className="section-heading"><div><span>偏好分布</span><h2>四个维度的本次位置</h2></div><em>结果不是能力高低</em></div><AxisBars result={result} /></section>
+      <section className="report-card report-reading-guide"><div className="section-heading"><div><span>先这样看报告</span><h2>从结论到例子，三步就能看懂</h2></div></div><div><article><b>01</b><h3>先看四项占比</h3><p>看每一组字母中，你这次更常选择哪一边。</p></article><article><b>02</b><h3>再看场景例子</h3><p>把占比放回生活、感情和社交中理解。</p></article><article><b>03</b><h3>最后看建议</h3><p>高低都不是好坏，只代表你更常使用的路径。</p></article></div></section>
+      <section className="report-card"><div className="section-heading"><div><span>01 · 四项占比</span><h2>你在四组偏好中的本次位置</h2></div><em>不是能力高低</em></div><p className="percentage-explainer">例如 E 65% / I 35%，意思是这次回答更常接近 E 侧反应，不是“人格里有 65% 是 E”。</p><AxisBars result={result} /><div className="axis-scene-grid">{report.axes.map((axis) => { const examples = SCENE_EXAMPLES[axis.dominantPole]; return <article key={axis.axis}><header><span>{axis.axis}</span><div><small>{axis.title}</small><h3>更接近 {axis.dominantPole} · {axis.dominantPercent}%</h3></div></header><dl><div><dt>生活</dt><dd>{examples.life}</dd></div><div><dt>感情</dt><dd>{examples.relationship}</dd></div><div><dt>社交</dt><dd>{examples.social}</dd></div></dl></article>; })}</div></section>
       <section className="metrics-grid">
         <article><span>完成率</span><b>{Math.round(result.completionRate * 100)}%</b><small>{result.answeredCount} / {result.plannedCount} 题有效</small></article>
         <article><span>中位反应</span><b>{(result.medianResponseMs / 1000).toFixed(1)}s</b><small>反映本次作答节奏</small></article>
         <article><span>临界维度</span><b>{AXES.filter((axis) => result.axes[axis].boundaryLabel === "near-boundary").length}</b><small>接近中线时更受情境影响</small></article>
       </section>
-      <section className="report-card intro-card"><div className="section-heading"><div><span>行为逻辑</span><h2>{report.flowTitle}</h2></div></div><p className="lead-copy">{report.behaviorLogic}</p></section>
-      <section className="report-card"><div className="section-heading"><div><span>四维详细解释</span><h2>百分比描述偏好方向，不是人格成分</h2></div></div><div className="axis-detail-grid">{report.axes.map((axis) => <article key={axis.axis}><div className="axis-detail-title"><b>{axis.axis}</b><div><span>{axis.title}</span><h3>{axis.dominantPole} {axis.dominantPercent}% · {axis.strengthLabel}</h3></div></div><p>{axis.definition}</p><p className="axis-summary">{axis.summary}</p><dl><div><dt>生活表现</dt><dd>{axis.life}</dd></div><div><dt>学习 / 工作</dt><dd>{axis.work}</dd></div><div><dt>感情表现</dt><dd>{axis.relationship}</dd></div><div><dt>容易被误解</dt><dd>{axis.misunderstood}</dd></div><div><dt>另一侧能力</dt><dd>{axis.otherSide}</dd></div>{axis.sceneSwitch && <div><dt>场景切换</dt><dd>{axis.sceneSwitch}</dd></div>}</dl></article>)}</div></section>
-      <section className="report-card"><div className="section-heading"><div><span>你的 32 项行为特质</span><h2>高分代表更常依赖，不代表更好</h2></div><em>0–100</em></div><div className="trait-ranking"><div className="trait-band top"><h3>最高 6 项</h3>{report.topTraits.map((trait) => <article key={trait.id}><div><b>{trait.name}</b><span>{trait.domain === "life" ? "生活" : "感情"}</span></div><strong>{trait.score}</strong><i><em style={{ width: `${trait.score}%` }} /></i><p>{trait.interpretation}</p></article>)}</div><details><summary>查看中间 20 项</summary><div className="trait-compact-grid">{report.middleTraits.map((trait) => <div key={trait.id}><span>{trait.name}</span><b>{trait.score}</b><i><em style={{ width: `${trait.score}%` }} /></i></div>)}</div></details><div className="trait-band bottom"><h3>较少依赖的 6 项</h3>{report.bottomTraits.map((trait) => <article key={trait.id}><div><b>{trait.name}</b><span>{trait.domain === "life" ? "生活" : "感情"}</span></div><strong>{trait.score}</strong><i><em style={{ width: `${trait.score}%` }} /></i><p>{trait.interpretation}</p></article>)}</div></div></section>
+      <section className="report-card intro-card"><div className="section-heading"><div><span>02 · 一句话总结</span><h2>{report.flowTitle}</h2></div></div><p className="lead-copy">{report.behaviorLogic}</p></section>
+      <section className="report-card"><div className="section-heading"><div><span>03 · 四项说明</span><h2>每项偏好在不同场景里怎样表现</h2></div></div><div className="axis-detail-grid">{report.axes.map((axis) => <article key={axis.axis}><div className="axis-detail-title"><b>{axis.axis}</b><div><span>{axis.title}</span><h3>{axis.dominantPole} {axis.dominantPercent}% · {axis.strengthLabel}</h3></div></div><p>{axis.definition}</p><p className="axis-summary">{axis.summary}</p><dl><div><dt>生活表现</dt><dd>{axis.life}</dd></div><div><dt>学习 / 工作</dt><dd>{axis.work}</dd></div><div><dt>感情表现</dt><dd>{axis.relationship}</dd></div><div><dt>容易被误解</dt><dd>{axis.misunderstood}</dd></div><div><dt>另一侧能力</dt><dd>{axis.otherSide}</dd></div>{axis.sceneSwitch && <div><dt>场景切换</dt><dd>{axis.sceneSwitch}</dd></div>}</dl></article>)}</div></section>
+      <section className="report-card"><div className="section-heading"><div><span>04 · 32 项行为特质</span><h2>高分代表更常使用，不代表更好</h2></div><em>0–100</em></div><div className="trait-ranking"><div className="trait-band top"><h3>最高 6 项</h3>{report.topTraits.map((trait) => <article key={trait.id}><div><b>{trait.name}</b><span>{trait.domain === "life" ? "生活" : "感情"}</span></div><strong>{trait.score}</strong><i><em style={{ width: `${trait.score}%` }} /></i><p>{trait.interpretation}</p></article>)}</div><details><summary>查看中间 20 项</summary><div className="trait-compact-grid">{report.middleTraits.map((trait) => <div key={trait.id}><span>{trait.name}</span><b>{trait.score}</b><i><em style={{ width: `${trait.score}%` }} /></i></div>)}</div></details><div className="trait-band bottom"><h3>较少依赖的 6 项</h3>{report.bottomTraits.map((trait) => <article key={trait.id}><div><b>{trait.name}</b><span>{trait.domain === "life" ? "生活" : "感情"}</span></div><strong>{trait.score}</strong><i><em style={{ width: `${trait.score}%` }} /></i><p>{trait.interpretation}</p></article>)}</div></div></section>
       <section className="report-card split-report"><div><div className="section-heading"><div><span>生活画像</span><h2>日常、学习与工作中的你</h2></div></div><p>{report.lifeSummary}</p><ul className="quality-list">{report.lifeTraits.slice(0, 5).map((trait) => <li key={trait.id}><span>{trait.name}</span><b>{trait.score}</b></li>)}</ul></div><div><div className="section-heading"><div><span>感情画像</span><h2>亲密关系中的你</h2></div></div><p>{report.relationshipSummary}</p><ul className="quality-list">{report.relationshipTraits.slice(0, 5).map((trait) => <li key={trait.id}><span>{trait.name}</span><b>{trait.score}</b></li>)}</ul></div></section>
       <section className="report-card"><div className="section-heading"><div><span>生活画像</span><h2>十个真实生活侧面</h2></div></div><div className="topic-grid">{report.lifeTopics.map((topic) => <article key={topic.title}><h3>{topic.title}</h3><p>{topic.text}</p></article>)}</div></section>
       <section className="report-card"><div className="section-heading"><div><span>感情与亲密关系</span><h2>八个关系中的反应侧面</h2></div></div><div className="topic-grid relationship">{report.relationshipTopics.map((topic) => <article key={topic.title}><h3>{topic.title}</h3><p>{topic.text}</p></article>)}</div></section>

@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { selectDongDongZouQuestions, validateDongDongZouBank } from "../lib/dongdongzouQuestionBankSelector.ts";
 
 const BANK_PATH = "lib/data/DONGDONGZOU_MBTI_QUESTION_BANK_640_v2.json";
-const EXPECTED_SHA256 = "f662c020ca3b073807334fac834d317688f30b38991c26979e31c29ca95c7447";
+const EXPECTED_SHA256 = "3b7ae430952d32d64825a765546f4d41400d88f94fbf20268b687fbc215b8543";
 const raw = await readFile(BANK_PATH);
 const bank = JSON.parse(raw.toString("utf8"));
 const questions = bank.questions;
@@ -29,7 +29,7 @@ function maxRun(items, key) {
 
 const sha256 = createHash("sha256").update(raw).digest("hex");
 if (sha256 !== EXPECTED_SHA256) errors.push(`SHA-256 不一致：${sha256}`);
-if (bank.meta.version !== "2.0.0") errors.push(`题库版本应为 2.0.0，实际 ${bank.meta.version}`);
+if (bank.meta.version !== "2.1.0") errors.push(`题库版本应为 2.1.0，实际 ${bank.meta.version}`);
 if (questions.length !== 640) errors.push(`总题数应为 640，实际 ${questions.length}`);
 if (questions[0]?.id !== "DDZ-Q0001" || questions.at(-1)?.id !== "DDZ-Q0640") errors.push("首尾题目 ID 不正确");
 
@@ -49,15 +49,20 @@ for (const question of questions) {
   for (const field of ["bankVersion", "axis", "domain", "traitId", "traitName", "targetPole", "responseType", "responseGuide", "mirrorGroup", "scenarioTag", "readingLength", "estimatedReadingMs", "timeoutMs", "weight"]) {
     if (question[field] === undefined || question[field] === "") errors.push(`${question.id} 缺少 ${field}`);
   }
-  if (question.bankVersion !== "2.0.0") errors.push(`${question.id} 版本错误`);
+  if (question.bankVersion !== "2.1.0") errors.push(`${question.id} 版本错误`);
   if (!question.isActive || !question.isOriginal) errors.push(`${question.id} 必须是启用的原创题`);
   if (question.timeoutMs !== 12000) errors.push(`${question.id} 超时应为 12000ms`);
   if (question.prompt.length > 48 || question.readingLength !== question.prompt.length) errors.push(`${question.id} 题干长度错误`);
   if (question.options.length !== 3) errors.push(`${question.id} 必须有三个选项`);
+  if (question.responseType !== "directional") errors.push(`${question.id} 必须使用具体行为对比选项`);
+  if (question.responseGuide !== "先选更像你的反应；只有两种反应同样常见时，再选中间。") errors.push(`${question.id} 作答引导不正确`);
   const axisScores = question.options.map((option) => option.axisScore).sort((a, b) => a - b).join(",");
   const traitScores = question.options.map((option) => option.traitScore).sort((a, b) => a - b).join(",");
   if (axisScores !== "-2,0,2" || traitScores !== "-2,0,2") errors.push(`${question.id} 显式分数不完整`);
   if (question.options.some((option) => !option.id || !option.label || option.axisScore === undefined || option.traitScore === undefined)) errors.push(`${question.id} 选项字段缺失`);
+  if (question.options.find((option) => option.axisScore === 0)?.label !== "两种都差不多") errors.push(`${question.id} 中间项必须说明两边同样常见`);
+  if (new Set(question.options.map((option) => option.label)).size !== 3) errors.push(`${question.id} 三个选项必须清晰区分`);
+  if (question.options.some((option) => ["很像我", "看情况", "不太像我", "经常会", "偶尔会", "很少会", "要看当时情况"].includes(option.label))) errors.push(`${question.id} 仍包含模糊通用选项`);
 }
 
 const axisCounts = countBy(questions, "axis");
@@ -72,7 +77,7 @@ for (const axis of axes) for (const domain of domains) {
   if (count !== 80) errors.push(`${axis}-${domain} 应为 80，实际 ${count}`);
 }
 if (Object.keys(traitCounts).length !== 32 || Object.values(traitCounts).some((count) => count !== 20)) errors.push("32 项行为特质必须各 20 题");
-if (typeCounts.selfMatch !== 448 || typeCounts.frequency !== 128 || typeCounts.directional !== 64) errors.push(`答案模板比例错误：${JSON.stringify(typeCounts)}`);
+if (typeCounts.directional !== 640 || Object.keys(typeCounts).length !== 1) errors.push(`全部题目都应为行为对比题：${JSON.stringify(typeCounts)}`);
 if (Object.keys(mirrorCounts).length !== 160 || Object.values(mirrorCounts).some((count) => count !== 4)) errors.push("镜像组必须为 160 组且每组 4 题");
 
 const simulations = [];
