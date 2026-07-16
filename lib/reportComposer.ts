@@ -38,7 +38,48 @@ export type AxisInsight = {
   sceneSwitch?: string;
 };
 
+export type LifeDimensionInsight = {
+  id: string;
+  title: string;
+  score: number;
+  usageLabel: string;
+  interpretation: string;
+  example: string;
+};
+
 const traits = traitCatalogJson.traits as TraitCatalogItem[];
+
+const lifeDimensionSpecs = [
+  { id: "L_E_SOCIAL", title: "社交启动", high: "到了几乎没有熟人的聚会，你通常愿意先找一个人聊起来。", low: "你更可能先观察环境，等感觉安全后再慢慢参与。" },
+  { id: "L_I_RECOVER", title: "独处恢复", high: "连续社交几天后，你会主动空出一段安静时间恢复状态。", low: "你更容易通过聊天或共同活动重新获得能量。" },
+  { id: "L_I_THINK", title: "独立思考", high: "面对重要决定，你会先独立想清楚，再和别人讨论。", low: "你更容易在来回交流中逐渐确认自己的想法。" },
+  { id: "L_S_DETAIL", title: "细节核对", high: "购买价格较高的东西前，你会核对参数、价格和实际条件。", low: "你通常先抓整体感受，需要时才回头补细节。" },
+  { id: "L_N_POSSIBILITY", title: "可能性探索", high: "别人提出一个普通想法时，你常会继续想到它还能变成什么。", low: "你更愿意先把已经可行的方法稳定做好。" },
+  { id: "L_S_PRACTICAL", title: "现实落地", high: "有了新想法后，你会很快追问今天能先完成哪一步。", low: "你更愿意先把方向想丰富，不急着马上固定做法。" },
+  { id: "L_T_LOGIC", title: "逻辑判断", high: "即使大家都赞同一个观点，你仍会检查它的因果和标准。", low: "你会先理解相关人的处境，再判断这个观点是否合适。" },
+  { id: "L_F_EMOTION", title: "情绪感知", high: "朋友嘴上说没事但状态不对时，你通常能较快注意到变化。", low: "你更相信对方明确说出的内容，不轻易替他解释感受。" },
+  { id: "L_J_PLAN", title: "计划组织", high: "准备三到五天的旅行时，你会先确定住宿、路线和关键时间。", low: "你通常只定最基本的部分，把更多决定留到现场。" },
+  { id: "L_P_ADAPT", title: "灵活应变", high: "原定计划临时被打乱时，你通常能较快接受并重新安排。", low: "突发变化会明显占用你的精力，你更喜欢维持确定节奏。" },
+] as const;
+
+const lifeManualCopy: Record<Pole, string> = {
+  E: "先找可信任的人聊一轮，借外部反馈理清状态；之后再留一点时间独立收束。",
+  I: "先给自己一段安静时间形成判断，再把结论和需要明确告诉关键的人。",
+  S: "先核对已经发生的事实、数字和步骤，再决定是否需要扩大解释。",
+  N: "先抓住信息之间的联系和可能方向，再补三个可以验证的具体事实。",
+  T: "先明确问题、标准和可执行办法，再确认这个决定会怎样影响相关的人。",
+  F: "先确认感受和关系影响，再把自己的原则、边界与下一步说清楚。",
+  J: "先确定关键节点、截止点和必须完成的部分，同时为变化预留缓冲。",
+  P: "先保留选择并开始一个小尝试，再设一个检查点，避免事情一直悬着。",
+};
+
+function usageLabel(score: number): string {
+  if (score >= 70) return "自然常用";
+  if (score >= 56) return "比较常用";
+  if (score >= 45) return "灵活切换";
+  if (score >= 30) return "较少使用";
+  return "通常不优先";
+}
 
 const legacyTraitIds: Record<string, string> = {
   L_E_SOCIAL: "life_social_initiative", L_I_RECOVER: "life_solitude_recovery",
@@ -236,6 +277,42 @@ export function composeReport(result: SessionResult, completedRuns: SessionResul
   const relationshipTraits = traitScores.filter((item) => item.domain === "relationship");
   const axisBy = Object.fromEntries(axes.map((item) => [item.axis, item])) as Record<Axis, AxisInsight>;
   const traitBy = Object.fromEntries(traitScores.map((item) => [item.id, item])) as Record<string, TraitInsight>;
+  const lifeDimensions: LifeDimensionInsight[] = lifeDimensionSpecs.map((spec) => {
+    const trait = traitBy[spec.id];
+    const example = trait.score >= 56
+      ? spec.high
+      : trait.score <= 44
+        ? spec.low
+        : `这两种方式你都会使用，通常会根据精力、关系距离和事情的重要程度切换。`;
+    return {
+      id: spec.id,
+      title: spec.title,
+      score: trait.score,
+      usageLabel: usageLabel(trait.score),
+      interpretation: trait.interpretation,
+      example,
+    };
+  });
+  const coreLifeResources = traitScores.slice(0, 6).map((item) => ({
+    title: item.name,
+    score: item.score,
+    domain: item.domain,
+    text: item.interpretation,
+    evidence: `常见表现：${item.behavior}。`,
+    action: item.action,
+  }));
+  const energyDrains = traitScores.slice(-5).reverse().map((item) => ({
+    title: item.name,
+    score: item.score,
+    text: `当生活持续要求你${item.behavior}时，你可能需要投入更多注意力，也更容易感到消耗。你更自然的方式通常是${item.alternative}。`,
+    action: item.action,
+  }));
+  const lifeManual = axes.map((item) => ({
+    axis: item.axis,
+    title: ({ EI: "恢复精力时", SN: "理解信息时", TF: "做重要决定时", JP: "安排生活节奏时" } as Record<Axis, string>)[item.axis],
+    preference: `${item.dominantPole} ${item.dominantPercent}% · ${item.strengthLabel}`,
+    text: lifeManualCopy[item.dominantPole],
+  }));
   const runs = completedRuns.length ? completedRuns : [result];
   const quality = {
     confidence: confidence(result, runs),
@@ -257,6 +334,10 @@ export function composeReport(result: SessionResult, completedRuns: SessionResul
     bottomTraits: traitScores.slice(-6).reverse(),
     lifeTraits,
     relationshipTraits,
+    lifeDimensions,
+    coreLifeResources,
+    energyDrains,
+    lifeManual,
     gaps,
     flow,
     flowTitle: flow.join(" → "),

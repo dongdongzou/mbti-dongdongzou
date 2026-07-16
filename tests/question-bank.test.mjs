@@ -130,6 +130,19 @@ test("新版会话保存 2.1.0，单次和三次报告标签正确", () => {
   assert.equal(composeReport(result, [result, result, result]).runValidation.label, "稳定画像");
 });
 
+test("生活报告包含十项特质、六项资源、消耗场景和四类使用说明", () => {
+  const selected = selectDongDongZouQuestions(questions, 100, 20260716, []);
+  const result = computeSessionResult("life-report", selected, selected.map((question) => response(question, question.options[0], 3600)));
+  const report = composeReport(result, [result]);
+  assert.equal(report.lifeDimensions.length, 10);
+  assert.equal(report.coreLifeResources.length, 6);
+  assert.equal(report.energyDrains.length, 5);
+  assert.equal(report.lifeManual.length, 4);
+  assert.ok(report.lifeDimensions.every((item) => item.example.length >= 15 && item.interpretation.length >= 20));
+  assert.ok(report.coreLifeResources.every((item) => item.evidence.startsWith("常见表现：") && item.action));
+  assert.deepEqual(report.lifeManual.map((item) => item.title), ["恢复精力时", "理解信息时", "做重要决定时", "安排生活节奏时"]);
+});
+
 test("运行时代码只导入新版题库并让旧的未完成会话失效", async () => {
   const source = await readFile(new URL("../app/InnerCompassApp.tsx", import.meta.url), "utf8");
   assert.match(source, /DONGDONGZOU_MBTI_QUESTION_BANK_640_v2\.json/);

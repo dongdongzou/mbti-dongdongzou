@@ -4,16 +4,16 @@ import "./globals.css";
 export const metadata: Metadata = {
   metadataBase: new URL("https://dongdongzou.github.io/mbti-dongdongzou/"),
   title: "InnerCompass 16｜看见你的行为偏好",
-  description: "从 DONGDONGZOU 场景对比题库 v2.1 的 640 道原创题中完成 80、100 或 120 题，每题在两种具体反应中直觉选择，看见 32 项行为特质。",
+  description: "完成 DONGDONGZOU 场景对比问卷，获得包含十项生活特质、核心生活资源、消耗场景、生活使用说明与成长建议的动态分析报告。",
   openGraph: {
     title: "InnerCompass 16",
-    description: "场景对比题库 v2.1｜两种具体反应 · 12 秒直觉作答 · 32 项行为特质",
-    images: [{ url: "og.png", width: 1731, height: 909, alt: "InnerCompass 16 场景对比问卷与动态深度报告" }],
+    description: "从真实选择到生活分析｜十项生活特质 · 核心资源 · 生活使用说明",
+    images: [{ url: "og.png", width: 1731, height: 909, alt: "InnerCompass 16 生活分析报告" }],
   },
   twitter: {
     card: "summary_large_image",
     title: "InnerCompass 16",
-    description: "场景对比题库 v2.1｜两种具体反应 · 12 秒直觉作答 · 32 项行为特质",
+    description: "从真实选择到生活分析｜十项生活特质 · 核心资源 · 生活使用说明",
     images: ["og.png"],
   },
 };
